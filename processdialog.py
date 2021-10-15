@@ -1,6 +1,7 @@
 import json
 import tqdm
 import random
+from dialogparser import parser
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 random.seed(42)
@@ -26,7 +27,7 @@ with open("synthetic.augmented.json") as fin:
             action = "<sos_a> " + t[1]['action'] + " <eos_a>"
             response = f"<sos_r> {t[1]['utterance_delex']} <eos_r>"
             dialog += utterance+belief+action+response
-        dialogues.append({'id':d['id'], 'text':dialog})
+        dialogues.append({'id':d['id'], 'text':dialog, 'mwoz': parser(dialog)})
     random.shuffle(dialogues)
     f1 = open("data/process.train.json", "w")
     f2 = open("data/process.valid.json", "w")
