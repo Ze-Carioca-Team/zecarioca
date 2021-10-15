@@ -1,1 +1,6 @@
 *.json
+wandb/
+venv/
+models/
+*.pyc
+.ipynb_checkpoints/
