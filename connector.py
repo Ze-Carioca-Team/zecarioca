@@ -26,7 +26,7 @@ def parse_data(d):
         if d[i]==start:
             is_adding = True
 
-    if '[consulta_saldo]' in founds:
+    if '[consulta_saldo]' in founds or True:
         if 'cpf' in founds and 'placa' in founds:
             cpf_index = founds.index('cpf')+1
             placa_index = founds.index('placa')+1

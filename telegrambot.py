@@ -72,7 +72,6 @@ def telegram_bot(args):
 
             context.user_data['msg'] += generated
             decoded_output = tokenizer.decode(generated)
-            parsed = parse_data(decoded_output)
             print("="*80)
             print(decoded_output)
             print(parse_data(decoded_output))
