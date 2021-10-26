@@ -20,6 +20,8 @@ from transformers import (
 )
 from datasets import load_dataset, load_metric
 
+torch.manual_seed(42)
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(sys.stdout)
@@ -70,6 +72,8 @@ def main():
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
     model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
+    tokenizer.added_tokens_encoder = {}
+    tokenizer.added_tokens_dencoder = {}
     tokenizer.add_special_tokens({'additional_special_tokens': tokens})
     tokenizer.save_pretrained("models/tokenizer/")
     tokenizer.pad_token = tokenizer.eos_token
@@ -167,15 +171,15 @@ def main():
             loss = outputs.loss
             losses.append(loss.item())
             for pred in torch.argmax(logits, dim=-1).cpu():
-                preds.append(tokenizer.decode(pred))
+                preds.append(parser(tokenizer.decode(pred)))
             for lab in batch["labels"].cpu():
-                labes.append(tokenizer.decode(lab))
+                labes.append(parser(tokenizer.decode(lab)))
         try:
             losses = torch.tensor(losses)
             mloss = torch.mean(losses)
         except OverflowError:
             perplexity = float("inf")
-
+        print(compute(preds, labes))
         logger.info(f"epoch {epoch}: loss: {mloss}")
 
         # model.save_pretrained(args.output_dir)
