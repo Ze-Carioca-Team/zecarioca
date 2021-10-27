@@ -10,7 +10,7 @@ random.seed(42)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
-    parser.add_argument("--file", type=str, help="A path for the file.")
+    parser.add_argument("--file", type=str, default=None, help="A path for the file.")
     return parser.parse_args()
 
 def main():
@@ -49,7 +49,7 @@ def main():
         json.dump(tokens, f3)
         c1, c2 = 0, 0
         for i, line in enumerate(dialogues):
-            if not str(line['id']).endswith(("1", "2", "3")):
+            if not line['id'].endswith(("1", "2", "3")):
                 print(json.dumps(line), file=f1)
                 c1 +=1
             else:
