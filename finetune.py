@@ -32,8 +32,7 @@ logger.addHandler(handler)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
-    parser.add_argument("--directory", type=str,
-        help="A path to save model.")
+    parser.add_argument("--directory", type=str, help="A path to save model.")
     parser.add_argument("--checkpoint", type=str,
         default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
         help="A path for initial model.")
@@ -49,15 +48,16 @@ def parse_args():
         help="Initial learning rate to use.")
     parser.add_argument("--weight_decay", type=float, default=0.01,
         help="Weight decay to use.")
-    parser.add_argument("--num_train_epochs", type=int, default=150,
+    parser.add_argument("--num_train_epochs", type=int, default=20,
         help="Total number of training epochs to perform.")
-    parser.add_argument("--max_train_steps", type=int, default=150,
+    parser.add_argument("--max_train_steps", type=int, default=None,
         help="Total number of training steps to perform.")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=32,
+        help="Number of updates steps to accumulate for a backward/update pass.")
     parser.add_argument("--lr_scheduler_type", type=SchedulerType, default="linear",
         help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"])
+        choices=["linear", "cosine", "cosine_with_restarts", "polynomial",
+                 "constant", "constant_with_warmup"])
     parser.add_argument("--num_warmup_steps", type=int, default=1,
         help="Number of steps for the warmup in the lr scheduler.")
     return parser.parse_args()
@@ -73,8 +73,10 @@ def main():
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
     model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
+    tokenizer.added_tokens_encoder = {}
+    tokenizer.added_tokens_dencoder = {}
     tokenizer.add_special_tokens({'additional_special_tokens': tokens})
-    tokenizer.save_pretrained("/content/drive/MyDrive/Training/"+str(args.directory)+"/models/tokenizer/")
+    tokenizer.save_pretrained(f"{args.directory}/tokenizer/")
     tokenizer.pad_token = tokenizer.eos_token
     model.resize_token_embeddings(len(tokenizer))
     datasets = load_dataset("json", data_files={"train":args.train_file,
@@ -138,6 +140,11 @@ def main():
     progress_bar = tqdm(range(args.max_train_steps))
     completed_steps = 0
 
+    device = "cuda:0"
+    model.to(device)
+    best_loss = math.inf
+    best_epoch = 0
+
     for epoch in range(args.num_train_epochs):
         if (args.resume_path == None): model.train()
         else: model.train(resume_from_checkpoint=str(args.resume_path))
@@ -160,44 +167,49 @@ def main():
                 break
         model.eval()
         losses = []
-        labes = []
         for step, batch in enumerate(valid_dataloader):
             with torch.no_grad():
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
             loss = outputs.loss
             losses.append(loss.item())
-            for lab in batch["labels"]:
-                labes.append(lab)
         losses = torch.tensor(losses)
         mloss = torch.mean(losses)
+        if mloss < best_loss:
+            best_loss = mloss
+            best_epoch = epoch
         logger.info(f"epoch {epoch}: loss: {mloss}")
         wandb.log({"loss": mloss})
-        output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss}/"
+        output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.3f}/"
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
 
-        compute_results = []
-        eos_token = tokenizer.encode("<eos_r>")[0]
-        for example in labes:
-            sindex = (example == tokenizer.encode("<sos_b>")[0])
-            sindex = sindex.nonzero(as_tuple=True)[0].tolist()
-            eindex = (example == eos_token)
-            eindex = eindex.nonzero(as_tuple=True)[0].tolist()
-            for start, end in zip(sindex, eindex):
-                input_ids = example[:start]
-                out = model.generate(input_ids.unsqueeze(0),
-                                     # temperature=0.7,
-                                     # top_p=0.9, num_beams=5,
-                                     # early_stopping=True,
-                                     pad_token_id=tokenizer.eos_token_id,
-                                     max_length=input_ids.shape[0]+60,
-                                     eos_token_id=eos_token)
-                gen = tokenizer.decode(out[0])
-                gt = tokenizer.decode(example[:end+1])
-                compute_results.append({"generated": gen, "groundtruth": gt})
-        with open(output_dir+"examples.json", "w") as fout:
-            json.dump(compute_results, fout, indent=2, ensure_ascii=False)
+    # TODO: load best model
+    labes = []
+    for step, batch in enumerate(valid_dataloader):
+        for lab in batch["labels"]:
+            labes.append(lab)
+    compute_results = []
+    eos_token = tokenizer.encode("<eos_r>")[0]
+    for example in labes:
+        sindex = (example == tokenizer.encode("<sos_b>")[0])
+        sindex = sindex.nonzero(as_tuple=True)[0].tolist()
+        eindex = (example == eos_token)
+        eindex = eindex.nonzero(as_tuple=True)[0].tolist()
+        for start, end in zip(sindex, eindex):
+            input_ids = example[:start]
+            out = model.generate(input_ids.unsqueeze(0),
+                                 # temperature=0.7,
+                                 # top_p=0.9, num_beams=5,
+                                 # early_stopping=True,
+                                 pad_token_id=tokenizer.eos_token_id,
+                                 max_length=input_ids.shape[0]+60,
+                                 eos_token_id=eos_token)
+            gen = tokenizer.decode(out[0])
+            gt = tokenizer.decode(example[:end+1])
+            compute_results.append({"generated": gen, "groundtruth": gt})
+    with open(output_dir+"examples.json", "w") as fout:
+        json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()
