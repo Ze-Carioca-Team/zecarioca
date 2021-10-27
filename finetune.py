@@ -20,8 +20,6 @@ from transformers import (
 )
 from datasets import load_dataset, load_metric
 
-torch.manual_seed(42)
-
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(sys.stdout)
@@ -39,21 +37,25 @@ def compute_metrics(pred):
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
-    parser.add_argument("--checkpoint", type=str, default=None,
+    parser.add_argument("--directory", type=str, default=None,
+        help="A path to save model.")
+    parser.add_argument("--checkpoint", type=str, default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
         help="A path for initial model.")
     parser.add_argument("--batch_size", type=int, default=32,
         help="Size of the batch.")
-    parser.add_argument("--train_file", type=str, default=None,
+    parser.add_argument("--resume_path", type=str, default=None,
+        help="Checkpoint address for continuing training.")
+    parser.add_argument("--train_file", type=str, default="data/process.train.json",
         help="A json file containing the training data.")
-    parser.add_argument("--validation_file", type=str, default=None,
+    parser.add_argument("--validation_file", type=str, default="data/process.valid.json",
         help="A json file containing the validation data.")
     parser.add_argument("--learning_rate", type=float, default=2e-5,
         help="Initial learning rate to use.")
     parser.add_argument("--weight_decay", type=float, default=0.01,
         help="Weight decay to use.")
-    parser.add_argument("--num_train_epochs", type=int, default=20,
+    parser.add_argument("--num_train_epochs", type=int, default=150,
         help="Total number of training epochs to perform.")
-    parser.add_argument("--max_train_steps", type=int, default=None,
+    parser.add_argument("--max_train_steps", type=int, default=150,
         help="Total number of training steps to perform.")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -72,10 +74,8 @@ def main():
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
     model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
-    tokenizer.added_tokens_encoder = {}
-    tokenizer.added_tokens_dencoder = {}
     tokenizer.add_special_tokens({'additional_special_tokens': tokens})
-    tokenizer.save_pretrained("models/tokenizer/")
+    tokenizer.save_pretrained("/content/drive/MyDrive/Training/"+str(args.directory)+"/models/tokenizer/")
     tokenizer.pad_token = tokenizer.eos_token
     model.resize_token_embeddings(len(tokenizer))
     datasets = load_dataset("json", data_files={"train":args.train_file,
@@ -139,10 +139,10 @@ def main():
     progress_bar = tqdm(range(args.max_train_steps))
     completed_steps = 0
 
-    device = "cuda:0"
-    model.to(device)
     for epoch in range(args.num_train_epochs):
-        model.train()
+        if (args.resume_path == None): model.train()
+        else: model.train(resume_from_checkpoint=str(args.resume_path))
+
         for step, batch in enumerate(train_dataloader):
             batch = {k: v.to(device) for k, v in batch.items()}
             outputs = model(**batch)
@@ -171,19 +171,20 @@ def main():
             loss = outputs.loss
             losses.append(loss.item())
             for pred in torch.argmax(logits, dim=-1).cpu():
-                preds.append(parser(tokenizer.decode(pred)))
+                preds.append(tokenizer.decode(pred))
             for lab in batch["labels"].cpu():
-                labes.append(parser(tokenizer.decode(lab)))
+                labes.append(tokenizer.decode(lab))
         try:
             losses = torch.tensor(losses)
             mloss = torch.mean(losses)
         except OverflowError:
             perplexity = float("inf")
-        print(compute(preds, labes))
+
         logger.info(f"epoch {epoch}: loss: {mloss}")
 
-        # model.save_pretrained(args.output_dir)
-        # tokenizer.save_pretrained(args.output_dir)
+        output_dir = "/content/drive/MyDrive/Training/"+str(args.directory)+"/checkpoint-"+str(epoch)+"/"
+        model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
 
 if __name__ == "__main__":
     main()
