@@ -29,11 +29,7 @@ def bleu(input_data, reference_dialogs):
     :returns: TODO
 
     """
-    hyps = []
-    for dialog in input_data:
-        for turn in dialog:
-            hyps.append(turn["response"])
-
+    hyps = [dialog["response"] for dialog in input_data]
     return {r : corpus_bleu(hyps, reference_dialogs[r]).score for r in\
             reference_dialogs}
 
