@@ -2,6 +2,7 @@
 # coding=utf-8
 import sys
 import json
+import math
 import torch
 import wandb
 import logging
@@ -159,12 +160,15 @@ def main():
                 break
         model.eval()
         losses = []
+        labes = []
         for step, batch in enumerate(valid_dataloader):
             with torch.no_grad():
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
             loss = outputs.loss
             losses.append(loss.item())
+            for lab in batch["labels"]:
+                labes.append(lab)
         losses = torch.tensor(losses)
         mloss = torch.mean(losses)
         logger.info(f"epoch {epoch}: loss: {mloss}")
@@ -173,33 +177,27 @@ def main():
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
 
-    # TODO: load best model
-    model.eval()
-    labes = []
-    for step, batch in enumerate(valid_dataloader):
-        for lab in batch["labels"]:
-            labes.append(lab)
-    preds = []
-    trues = []
-    eos_token = tokenizer.encode("<eos_r>")[0]
-    for example in labes:
-        sindex = (example == tokenizer.encode("<sos_b>")[0])
-        sindex = sindex.nonzero(as_tuple=True)[0].tolist()
-        eindex = (example == eos_token)
-        eindex = eindex.nonzero(as_tuple=True)[0].tolist()
-        for start, end in zip(sindex, eindex):
-            input_ids = example[:start]
-            out = model.generate(input_ids.unsqueeze(0),
-                                 # temperature=0.7,
-                                 # top_p=0.9, num_beams=5,
-                                 # early_stopping=True,
-                                 pad_token_id=tokenizer.eos_token_id,
-                                 max_length=input_ids.shape[0]+60,
-                                 eos_token_id=eos_token)
-            decoded_utt = tokenizer.decode(out[0])
-            preds.append(parser(decoded_utt))
-            trues.append(parser(tokenizer.decode(example[:end+1])))
-    wandb.log(compute(preds, trues))
+        compute_results = []
+        eos_token = tokenizer.encode("<eos_r>")[0]
+        for example in labes:
+            sindex = (example == tokenizer.encode("<sos_b>")[0])
+            sindex = sindex.nonzero(as_tuple=True)[0].tolist()
+            eindex = (example == eos_token)
+            eindex = eindex.nonzero(as_tuple=True)[0].tolist()
+            for start, end in zip(sindex, eindex):
+                input_ids = example[:start]
+                out = model.generate(input_ids.unsqueeze(0),
+                                     # temperature=0.7,
+                                     # top_p=0.9, num_beams=5,
+                                     # early_stopping=True,
+                                     pad_token_id=tokenizer.eos_token_id,
+                                     max_length=input_ids.shape[0]+60,
+                                     eos_token_id=eos_token)
+                gen = tokenizer.decode(out[0])
+                gt = tokenizer.decode(example[:end+1])
+                compute_results.append({"generated": gen, "groundtruth": gt})
+        with open(output_dir+"examples.json", "w") as fout:
+            json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()
