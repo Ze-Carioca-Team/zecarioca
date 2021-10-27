@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 import sys
-import math
 import json
 import torch
 import wandb
@@ -10,7 +9,7 @@ import argparse
 from tqdm import tqdm
 from copy import deepcopy
 from dialogparser import parser
-from evaluate import compute
+from metrics import compute
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     GPT2Tokenizer, GPT2LMHeadModel,
@@ -30,12 +29,6 @@ handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-
-def compute_metrics(pred):
-    preds, labels = pred
-    preds = parser(tokenizer.decode(preds))
-    labels = parser(tokenizer.decode(labels))
-    return compute(preds, labels)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
