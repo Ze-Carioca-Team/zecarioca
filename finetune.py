@@ -4,6 +4,7 @@ import sys
 import math
 import json
 import torch
+import wandb
 import logging
 import argparse
 from tqdm import tqdm
@@ -37,13 +38,14 @@ def compute_metrics(pred):
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
-    parser.add_argument("--directory", type=str, default=None,
+    parser.add_argument("--directory", type=str,
         help="A path to save model.")
-    parser.add_argument("--checkpoint", type=str, default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
+    parser.add_argument("--checkpoint", type=str,
+        default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
         help="A path for initial model.")
     parser.add_argument("--batch_size", type=int, default=32,
         help="Size of the batch.")
-    parser.add_argument("--resume_path", type=str, default=None,
+    parser.add_argument("--resume_path", type=str,
         help="Checkpoint address for continuing training.")
     parser.add_argument("--train_file", type=str, default="data/process.train.json",
         help="A json file containing the training data.")
@@ -62,12 +64,15 @@ def parse_args():
     parser.add_argument("--lr_scheduler_type", type=SchedulerType, default="linear",
         help="The scheduler type to use.",
         choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"])
-    parser.add_argument("--num_warmup_steps", type=int, default=200,
+    parser.add_argument("--num_warmup_steps", type=int, default=1,
         help="Number of steps for the warmup in the lr scheduler.")
     return parser.parse_args()
 
 def main():
     args = parse_args()
+
+    wandb.init(project="zecarioca")
+    wandb.config.update(args)
 
     with open("data/ontology.json") as fin:
         tokens = json.load(fin)
@@ -88,7 +93,7 @@ def main():
 
     tokenized = datasets.map(add_tokens, num_proc=4, batched=True,
                              batch_size=args.batch_size,
-                             remove_columns=["id", "text", "mwoz"])
+                             remove_columns=["id", "text"])
 
     train_dataset = tokenized["train"]
     valid_dataset = tokenized["valid"]
@@ -147,9 +152,10 @@ def main():
             batch = {k: v.to(device) for k, v in batch.items()}
             outputs = model(**batch)
             loss = outputs.loss
-            # loss = loss / args.gradient_accumulation_steps
+            loss = loss / args.gradient_accumulation_steps
             loss.backward()
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -158,33 +164,49 @@ def main():
 
             if completed_steps >= args.max_train_steps:
                 break
-
         model.eval()
         losses = []
-        preds = []
-        labes = []
         for step, batch in enumerate(valid_dataloader):
             with torch.no_grad():
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
-            logits = outputs.logits
             loss = outputs.loss
             losses.append(loss.item())
-            for pred in torch.argmax(logits, dim=-1).cpu():
-                preds.append(tokenizer.decode(pred))
-            for lab in batch["labels"].cpu():
-                labes.append(tokenizer.decode(lab))
-        try:
-            losses = torch.tensor(losses)
-            mloss = torch.mean(losses)
-        except OverflowError:
-            perplexity = float("inf")
-
+        losses = torch.tensor(losses)
+        mloss = torch.mean(losses)
         logger.info(f"epoch {epoch}: loss: {mloss}")
-
-        output_dir = "/content/drive/MyDrive/Training/"+str(args.directory)+"/checkpoint-"+str(epoch)+"/"
+        wandb.log({"loss": mloss})
+        output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss}/"
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+
+    # TODO: load best model
+    model.eval()
+    labes = []
+    for step, batch in enumerate(valid_dataloader):
+        for lab in batch["labels"]:
+            labes.append(lab)
+    preds = []
+    trues = []
+    eos_token = tokenizer.encode("<eos_r>")[0]
+    for example in labes:
+        sindex = (example == tokenizer.encode("<sos_b>")[0])
+        sindex = sindex.nonzero(as_tuple=True)[0].tolist()
+        eindex = (example == eos_token)
+        eindex = eindex.nonzero(as_tuple=True)[0].tolist()
+        for start, end in zip(sindex, eindex):
+            input_ids = example[:start]
+            out = model.generate(input_ids.unsqueeze(0),
+                                 # temperature=0.7,
+                                 # top_p=0.9, num_beams=5,
+                                 # early_stopping=True,
+                                 pad_token_id=tokenizer.eos_token_id,
+                                 max_length=input_ids.shape[0]+60,
+                                 eos_token_id=eos_token)
+            decoded_utt = tokenizer.decode(out[0])
+            preds.append(parser(decoded_utt))
+            trues.append(parser(tokenizer.decode(example[:end+1])))
+    wandb.log(compute(preds, trues))
 
 if __name__ == "__main__":
     main()

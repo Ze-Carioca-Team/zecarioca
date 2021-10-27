@@ -31,12 +31,17 @@ def main():
                         intents += [item for sublist in parse for item in sublist]
                     else:
                         intents += [slot, t[0]['slot-values'][slot]]
-                bs = [t[0]['intent']] + intents
-                belief = "<sos_b> " + " ".join(bs).lower() + " <eos_b>"
-                action = "<sos_a> " + t[1]['action'] + " <eos_a>"
+                try:
+                    bs = [t[0]['intent']] + intents
+                    belief = "<sos_b> " + " ".join(bs).lower() + " <eos_b>"
+                    action = "<sos_a> " + t[1]['action'] + " <eos_a>"
+                except:
+                    print(t)
+                    exit()
                 response = f"<sos_r> {t[1]['utterance_delex']} <eos_r>"
                 dialog += utterance+belief+action+response
-            dialogues.append({'id':d['id'], 'text':dialog, 'mwoz': parser(dialog)})
+            dialogues.append({'id':d['id'], 'text':dialog})
+            # dialogues.append({'id':d['id'], 'text':dialog, 'mwoz': parser(dialog)})
         random.shuffle(dialogues)
         f1 = open("data/process.train.json", "w")
         f2 = open("data/process.valid.json", "w")
