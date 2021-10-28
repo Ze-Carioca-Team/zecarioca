@@ -143,7 +143,7 @@ def main():
     device = "cuda:0"
     model.to(device)
     best_loss = math.inf
-    best_epoch = 0
+    best_checkpoint = None
 
     for epoch in range(args.num_train_epochs):
         if (args.resume_path == None): model.train()
@@ -175,14 +175,14 @@ def main():
             losses.append(loss.item())
         losses = torch.tensor(losses)
         mloss = torch.mean(losses)
-        if mloss < best_loss:
-            best_loss = mloss
-            best_epoch = epoch
         logger.info(f"epoch {epoch}: loss: {mloss}")
         wandb.log({"loss": mloss})
         output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.3f}/"
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        if mloss < best_loss:
+            best_loss = mloss
+            best_checkpoint = output_dir
 
     # TODO: load best model
     labes = []
@@ -198,7 +198,7 @@ def main():
         eindex = eindex.nonzero(as_tuple=True)[0].tolist()
         for start, end in zip(sindex, eindex):
             input_ids = example[:start]
-            out = model.generate(input_ids.unsqueeze(0),
+            out = model.generate(input_ids.unsqueeze(0).to(device),
                                  # temperature=0.7,
                                  # top_p=0.9, num_beams=5,
                                  # early_stopping=True,
@@ -208,7 +208,7 @@ def main():
             gen = tokenizer.decode(out[0])
             gt = tokenizer.decode(example[:end+1])
             compute_results.append({"generated": gen, "groundtruth": gt})
-    with open(output_dir+"examples.json", "w") as fout:
+    with open(f"{args.directory}/examples-loss-{best_loss:.3f}.json", "w") as fout:
         json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
