@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
 import sys
-import math
 import json
+import math
 import torch
 import wandb
 import logging
@@ -29,23 +29,13 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-def compute_metrics(pred):
-    preds, labels = pred
-    preds = parser(tokenizer.decode(preds))
-    labels = parser(tokenizer.decode(labels))
-    return compute(preds, labels)
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
-    parser.add_argument("--project_name", type=str,
-        help="Wandb project name.")
-    parser.add_argument("--run_name", type=str,
-        help="Wandb run name.")
-    parser.add_argument("--run_id", type=str,
-        help="Wandb run id.")
-    parser.add_argument("--directory", type=str,
-        help="A path to save model.")
+    parser.add_argument("--project_name", type=str, help="Wandb project name.")
+    parser.add_argument("--run_name", type=str, help="Wandb run name.")
+    parser.add_argument("--run_id", type=str, help="Wandb run id.")
+    parser.add_argument("--directory", type=str, help="A path to save model.")
     parser.add_argument("--checkpoint", type=str,
         default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
         help="A path for initial model.")
@@ -67,11 +57,11 @@ def parse_args():
         help="Total number of training epochs to perform.")
     parser.add_argument("--max_train_steps", type=int, default=None,
         help="Total number of training steps to perform.")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=32,
+        help="Number of updates steps to accumulate for a backward/update pass.")
     parser.add_argument("--lr_scheduler_type", type=SchedulerType, default="linear",
-        help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"])
+        help="The scheduler type to use.", choices=["linear", "cosine",
+        "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"])
     parser.add_argument("--num_warmup_steps", type=int, default=1,
         help="Number of steps for the warmup in the lr scheduler.")
     return parser.parse_args()
@@ -94,7 +84,7 @@ def main():
     if (args.initial_epoch == 0):
         tokenizer.added_tokens_encoder = {}
         tokenizer.added_tokens_dencoder = {}
-        tokenizer.add_special_tokens({'additional_special_tokens': tokens})
+        tokenizer.add_special_tokens({"additional_special_tokens": tokens})
         tokenizer.save_pretrained(f"{args.directory}/tokenizer/")
         tokenizer.pad_token = tokenizer.eos_token
     model.resize_token_embeddings(len(tokenizer))
@@ -108,7 +98,7 @@ def main():
 
     tokenized = datasets.map(add_tokens, num_proc=4, batched=True,
                              batch_size=args.batch_size,
-                             remove_columns=["id", "text", "mwoz"])
+                             remove_columns=["id", "text"])
 
     train_dataset = tokenized["train"]
     valid_dataset = tokenized["valid"]
@@ -195,7 +185,6 @@ def main():
             with torch.no_grad():
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
-            logits = outputs.logits
             loss = outputs.loss
             losses.append(loss.item())
 
