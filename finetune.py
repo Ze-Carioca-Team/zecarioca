@@ -9,8 +9,8 @@ import logging
 import argparse
 from tqdm import tqdm
 from copy import deepcopy
-from dialogparser import parser
-from metrics import compute
+from dialogparser import parser, remove_tags
+from evaluate import compute, compute_bleu
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     GPT2Tokenizer, GPT2LMHeadModel,
@@ -32,13 +32,18 @@ logger.addHandler(handler)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
+    parser.add_argument("--project_name", type=str, help="Wandb project name.")
+    parser.add_argument("--run_name", type=str, help="Wandb run name.")
+    parser.add_argument("--run_id", type=str, help="Wandb run id.")
     parser.add_argument("--directory", type=str, help="A path to save model.")
     parser.add_argument("--checkpoint", type=str,
         default="models/adrenaline_multiwoz/epoch56_trloss0.40_gpt2",
         help="A path for initial model.")
-    parser.add_argument("--batch_size", type=int, default=32,
+    parser.add_argument("--initial_epoch", type=int, default=0,
+        help="Initial training epoch.")
+    parser.add_argument("--batch_size", type=int, default=8,
         help="Size of the batch.")
-    parser.add_argument("--resume_path", type=str,
+    parser.add_argument("--resume_path", type=str, default=None,
         help="Checkpoint address for continuing training.")
     parser.add_argument("--train_file", type=str, default="data/process.train.json",
         help="A json file containing the training data.")
@@ -48,16 +53,15 @@ def parse_args():
         help="Initial learning rate to use.")
     parser.add_argument("--weight_decay", type=float, default=0.01,
         help="Weight decay to use.")
-    parser.add_argument("--num_train_epochs", type=int, default=20,
+    parser.add_argument("--num_train_epochs", type=int, default=None,
         help="Total number of training epochs to perform.")
     parser.add_argument("--max_train_steps", type=int, default=None,
         help="Total number of training steps to perform.")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=32,
         help="Number of updates steps to accumulate for a backward/update pass.")
     parser.add_argument("--lr_scheduler_type", type=SchedulerType, default="linear",
-        help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial",
-                 "constant", "constant_with_warmup"])
+        help="The scheduler type to use.", choices=["linear", "cosine",
+        "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"])
     parser.add_argument("--num_warmup_steps", type=int, default=1,
         help="Number of steps for the warmup in the lr scheduler.")
     return parser.parse_args()
@@ -65,24 +69,29 @@ def parse_args():
 def main():
     args = parse_args()
 
-    wandb.init(project="zecarioca")
-    wandb.config.update(args)
+    if (args.initial_epoch != 0): wandb.init(id=args.run_id, project=args.project_name, resume=True)
+    else:
+        wandb.init(project=args.project_name)
+        wandb.run.name = args.run_name
+        wandb.config.update(args)
+        wandb.run.save()
 
     with open("data/ontology.json") as fin:
         tokens = json.load(fin)
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
     model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
-    tokenizer.added_tokens_encoder = {}
-    tokenizer.added_tokens_dencoder = {}
-    tokenizer.add_special_tokens({'additional_special_tokens': tokens})
-    tokenizer.save_pretrained(f"{args.directory}/tokenizer/")
-    tokenizer.pad_token = tokenizer.eos_token
+    if (args.initial_epoch == 0):
+        tokenizer.added_tokens_encoder = {}
+        tokenizer.added_tokens_dencoder = {}
+        tokenizer.add_special_tokens({"additional_special_tokens": tokens})
+        tokenizer.save_pretrained(f"{args.directory}/tokenizer/")
+        tokenizer.pad_token = tokenizer.eos_token
     model.resize_token_embeddings(len(tokenizer))
     datasets = load_dataset("json", data_files={"train":args.train_file,
                                                 "valid":args.validation_file})
     def add_tokens(examples):
-        res = tokenizer(examples['text'], max_length=256, truncation=True,
+        res = tokenizer(examples['text'], max_length=512, truncation=True,
                         padding='max_length')
         res['labels'] = deepcopy(res['input_ids'])
         return res
@@ -136,18 +145,22 @@ def main():
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
+
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps))
+    progress_bar = tqdm(range(args.num_train_epochs))
+    completed_epochs = args.initial_epoch
+    progress_bar.update(completed_epochs)
     completed_steps = 0
 
     device = "cuda:0"
     model.to(device)
     best_loss = math.inf
-    best_checkpoint = None
-
-    for epoch in range(args.num_train_epochs):
-        if (args.resume_path == None): model.train()
-        else: model.train(resume_from_checkpoint=str(args.resume_path))
+    best_epoch = 0
+    for epoch in range(args.initial_epoch, args.num_train_epochs):
+        try:
+            if (args.resume_path == None): model.train()
+            else: model.train(resume_from_checkpoint=str(args.resume_path))
+        except: model.train()
 
         for step, batch in enumerate(train_dataloader):
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -160,37 +173,57 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                progress_bar.update(1)
                 completed_steps += 1
+            if completed_steps >= args.max_train_steps: break
 
-            if completed_steps >= args.max_train_steps:
-                break
         model.eval()
         losses = []
+        preds = [[], []]
+        labes = [[], []]
+
         for step, batch in enumerate(valid_dataloader):
             with torch.no_grad():
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
             loss = outputs.loss
             losses.append(loss.item())
+
+            for pred in torch.argmax(logits, dim=-1).cpu():
+                preds[0].append(parser(tokenizer.decode(pred)))
+                preds[1].append(remove_tags(tokenizer.decode(pred)))
+            for lab in batch["labels"].cpu():
+                labes[0].append(parser(tokenizer.decode(lab)))
+                labes[1].append(remove_tags(tokenizer.decode(lab)))
+
+        bleui = compute(preds[0], labes[0]).values()
+        mbleui = math.fsum(bleui) / float(len(bleui))
+        mbleu = compute_bleu(preds[1], labes[1])
         losses = torch.tensor(losses)
         mloss = torch.mean(losses)
-        logger.info(f"epoch {epoch}: loss: {mloss}")
-        wandb.log({"loss": mloss})
-        output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.3f}/"
-        model.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
+
         if mloss < best_loss:
             best_loss = mloss
-            best_checkpoint = output_dir
+            best_epoch = epoch
 
-    # TODO: load best model
+        logger.info(f"epoch {epoch}: loss: {mloss}; bleu: {mbleu}; bleu_intent: {mbleui}")
+        wandb.log({"loss": mloss, "bleu": mbleu, "bleu_intent": mbleui})
+        output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.5f}/"
+        model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        progress_bar.update(1)
+        completed_epochs += 1
+
+    best_model_dir = f"{args.directory}/checkpoint-{best_epoch}-{best_loss:.5f}/"
+    model = GPT2LMHeadModel.from_pretrained(best_model_dir)
+    model.eval()
     labes = []
     for step, batch in enumerate(valid_dataloader):
         for lab in batch["labels"]:
             labes.append(lab)
+    preds = []
+    trues = []
     compute_results = []
-    eos_token = tokenizer.encode("<eos_r>")[0]
+    eos_token = tokenizer.encode(['<eos_r>'])[0]
     for example in labes:
         sindex = (example == tokenizer.encode("<sos_b>")[0])
         sindex = sindex.nonzero(as_tuple=True)[0].tolist()
@@ -198,18 +231,19 @@ def main():
         eindex = eindex.nonzero(as_tuple=True)[0].tolist()
         for start, end in zip(sindex, eindex):
             input_ids = example[:start]
-            out = model.generate(input_ids.unsqueeze(0).to(device),
-                                 # temperature=0.7,
-                                 # top_p=0.9, num_beams=5,
-                                 # early_stopping=True,
+            out = model.generate(input_ids=torch.LongTensor(input_ids).reshape(1,-1),
                                  pad_token_id=tokenizer.eos_token_id,
-                                 max_length=input_ids.shape[0]+60,
+                                 max_length=len(input_ids)+60,
                                  eos_token_id=eos_token)
-            gen = tokenizer.decode(out[0])
-            gt = tokenizer.decode(example[:end+1])
-            compute_results.append({"generated": gen, "groundtruth": gt})
-    with open(f"{args.directory}/examples-loss-{best_loss:.3f}.json", "w") as fout:
-        json.dump(compute_results, fout, indent=2, ensure_ascii=False)
+
+            tpred = tokenizer.decode(out[0])
+            ttrue = tokenizer.decode(example[:end+1])
+            preds.append(parser(tpred))
+            trues.append(parser(ttrue))
+            compute_results.append({"generated": tpred, "groundtruth": ttrue})
+    bleu_result = {"bleu": compute(preds, trues)}
+    with open(f"{args.directory}/examples-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(compute_results, fout, indent=2, ensure_ascii=False)
+    with open(f"{args.directory}/bleu-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(bleu_result, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()
