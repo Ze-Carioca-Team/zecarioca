@@ -1,13 +1,15 @@
 import math
-from dialogparser import get_intents
+from dialogparser import get_intents, remove_tags
 from collections import defaultdict, Counter
 from lexical_diversity import lex_div as ld
 from sacrebleu import corpus_bleu
+from thefuzz import fuzz
 
 def richness(input_data):
     """TODO: Docstring for richness.
 
-    :input_data: TODO
+    :input_data: List with a dict containing belief state, action, and
+    response.
     :returns: TODO
 
     """
@@ -52,6 +54,8 @@ def success(pred_data, true_data):
     """TODO: Docstring for success.
 
     :input_data: TODO
+    :input_data: List with a dict containing belief state, action, and
+    response.
     :db: TODO
     :goals: TODO
     :booked_domains: TODO
@@ -65,15 +69,27 @@ def success(pred_data, true_data):
             taction = set(get_intents(true[intent]).split())
             union = paction | taction
             intersection = paction & taction
-            print(union, intersection)
             jaccard[intent].append(len(intersection)/len(union))
     return {
         "belief": sum(jaccard["belief"])/len(jaccard["belief"]),
         "action": sum(jaccard["action"])/len(jaccard["action"]),
     }
 
-def bleu(input_data, reference_dialogs):
+def bleu(input_data, true_data):
     """TODO: Docstring for bleu.
+
+    :input_data: List with a dict containing belief state, action, and
+    response.
+    :reference: Expected states for the input_data.
+    :returns: Dict with computed bleu for every action.
+
+    """
+    hyps = [dialog["response"] for dialog in input_data]
+    true = [dialog["response"] for dialog in true_data]
+    return corpus_bleu(hyps, true).score
+
+def ibleu(input_data, reference_dialogs):
+    """TODO: Docstring for ibleu.
 
     :input_data: List with a dict containing belief state, action, and
     response.
@@ -85,7 +101,7 @@ def bleu(input_data, reference_dialogs):
     return {r : corpus_bleu(hyps, reference_dialogs[r]).score for r in\
             reference_dialogs}
 
-def jointacc(input_data, reference_states, fuzzy_ratio=95):
+def inform(input_data, reference_states, fuzzy_ratio=95):
     """TODO: Docstring for jointacc.
 
     :input_data: TODO
@@ -94,7 +110,12 @@ def jointacc(input_data, reference_states, fuzzy_ratio=95):
     :returns: TODO
 
     """
-    pass
+    scores = []
+    pbelief = [remove_tags(dialog["belief"]) for dialog in input_data]
+    tbelief = [remove_tags(dialog["belief"]) for dialog in reference_states]
+    for p, t in zip(pbelief, tbelief):
+        scores.append(fuzz.ratio(p, t)/100)
+    return sum(scores)/len(scores)
 
 def compute_all(pred_data, true_data):
     """TODO: Docstring for compute.
@@ -109,11 +130,10 @@ def compute_all(pred_data, true_data):
     for dialog in true_data:
         for action in dialog['action'].split(" "):
             reference_cat[action].append(dialog['response'])
-    score = bleu(pred_data, reference_cat)
     return {
-        "BLEU": sum([v for v in score.values()])/len(score),
-        "iBLEU": score,
+        "BLEU": bleu(pred_data, true_data),
+        "iBLEU": ibleu(pred_data, reference_cat),
         "RICHNESS": richness(pred_data),
-        "INFORM": 0,
+        "INFORM": inform(pred_data, true_data),
         "SUCCESS": success(pred_data, true_data),
     }

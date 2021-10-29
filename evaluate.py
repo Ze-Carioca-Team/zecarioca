@@ -6,7 +6,7 @@ import wandb
 import logging
 import argparse
 from tqdm import tqdm
-from dialogparser import parser, remove_tags
+from dialogparser import parser
 from metrics import compute_all
 
 def parse_args():

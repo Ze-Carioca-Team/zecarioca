@@ -6,7 +6,7 @@ def get_intents(sentence):
 
 def remove_tags(sentence):
     result = re.sub(r'\[\S+\]', "", sentence)
-    result = re.sub(r'\<\S+\>', "", result)
+    result = " ".join(re.sub(r'\<\S+\>', "", result).split())
     return result
 
 def parser(genstring):
@@ -18,7 +18,7 @@ def parser(genstring):
     """
     turn = genstring.split("<eos_u>")[-1]
     try:
-        bs = get_intents(turn.split('<sos_b>')[-1].split('<eos_b>')[0])
+        bs = turn.split('<sos_b>')[-1].split('<eos_b>')[0]
         sa = get_intents(turn.split('<sos_a>')[-1].split('<eos_a>')[0])
         resp = turn.split('<sos_r>')[-1].split('<eos_r>')[0]
         return {
