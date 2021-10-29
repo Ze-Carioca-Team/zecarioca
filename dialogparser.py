@@ -1,7 +1,7 @@
 import re
 
 def get_intents(sentence):
-    result = "".join(re.compile(r'\[\S+\]').findall(sentence))
+    result = " ".join(re.compile(r'\[\S+\]').findall(sentence))
     return result
 
 def remove_tags(sentence):
@@ -16,28 +16,21 @@ def parser(genstring):
     :returns: TODO
 
     """
-    dialog = []
-    for num, turn in enumerate(genstring.split(" <eos_r>")):
-        if not turn: continue
-        try:
-            utt = turn.split('<sos_u>')[-1].split('<eos_u>')[0]
-            bs = get_intents(turn.split('<sos_b>')[-1].split('<eos_b>')[0])
-            sa = get_intents(turn.split('<sos_a>')[-1].split('<eos_a>')[0])
-            resp = turn.split('<sos_r>')[-1].split('<eos_r>')[0]
-            dialog.append({
-                "utterance": utt,
-                "belief": bs,
-                "action": sa,
-                "response": resp,
-                "turn-num": num
-            })
-        except:
-            print("String can't be parsed")
-            dialog.append({
-                "utterance": "a",
-                "belief": "a",
-                "action": "a",
-                "response": "a",
-                "turn-num": "a"
-            })
+    turn = genstring.split("<eos_u>")[-1]
+    try:
+        bs = get_intents(turn.split('<sos_b>')[-1].split('<eos_b>')[0])
+        sa = get_intents(turn.split('<sos_a>')[-1].split('<eos_a>')[0])
+        resp = turn.split('<sos_r>')[-1].split('<eos_r>')[0]
+        return {
+            "belief": bs,
+            "action": sa,
+            "response": resp
+        }
+    except:
+        print("String can't be parsed")
+        return {
+            "belief": "a",
+            "action": "a",
+            "response": "a"
+        }
     return dialog

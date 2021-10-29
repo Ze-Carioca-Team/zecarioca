@@ -1,20 +1,29 @@
+#!/usr/bin/env python
+# coding=utf-8
 import json
-import nltk
-from collections import defaultdict
-from metrics import bleu
+import math
+import wandb
+import logging
+import argparse
+from tqdm import tqdm
+from dialogparser import parser, remove_tags
+from metrics import compute_all
 
-def compute(input_data, reference):
-    reference_cat = defaultdict(list)
-    for dialog in reference:
-        for turn in dialog:
-            sa = turn['action'].replace("][", "],[")
-            for action in sa.split(","):
-                reference_cat[action].append(turn['response'])
-    return bleu(input_data, reference_cat)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Finetune a transformers "
+                                    "model on a causal language modeling task")
+    parser.add_argument("--file", type=str, help="A path to save model.")
+    return parser.parse_args()
 
-def compute_bleu(input_data, reference):
-    mean_bleu = 0.0
-    for i in range(len(input_data)):
-        mean_bleu += nltk.translate.bleu_score.sentence_bleu([reference[i]], input_data[i])
-    mean_bleu = mean_bleu / float(len(input_data))
-    return mean_bleu
+def main():
+    args = parse_args()
+    with open(args.file) as fin:
+        data = json.load(fin)
+
+    preds = [parser(v["generated"]) for v in data]
+    trues = [parser(v["groundtruth"]) for v in data]
+    print(compute_all(preds, trues))
+
+
+if __name__ == "__main__":
+    main()

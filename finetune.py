@@ -10,7 +10,7 @@ import argparse
 from tqdm import tqdm
 from copy import deepcopy
 from dialogparser import parser, remove_tags
-from evaluate import compute, compute_bleu
+from metrics import compute
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     GPT2Tokenizer, GPT2LMHeadModel,
@@ -85,13 +85,12 @@ def main():
         tokenizer.added_tokens_encoder = {}
         tokenizer.added_tokens_dencoder = {}
         tokenizer.add_special_tokens({"additional_special_tokens": tokens})
-        tokenizer.save_pretrained(f"{args.directory}/tokenizer/")
         tokenizer.pad_token = tokenizer.eos_token
     model.resize_token_embeddings(len(tokenizer))
     datasets = load_dataset("json", data_files={"train":args.train_file,
                                                 "valid":args.validation_file})
     def add_tokens(examples):
-        res = tokenizer(examples['text'], max_length=512, truncation=True,
+        res = tokenizer(examples['text'], max_length=256, truncation=True,
                         padding='max_length')
         res['labels'] = deepcopy(res['input_ids'])
         return res
@@ -147,9 +146,7 @@ def main():
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.num_train_epochs))
-    completed_epochs = args.initial_epoch
-    progress_bar.update(completed_epochs)
+    progress_bar = tqdm(range(args.max_train_steps))
     completed_steps = 0
 
     device = "cuda:0"
@@ -173,13 +170,12 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+                progress_bar.update(1)
                 completed_steps += 1
             if completed_steps >= args.max_train_steps: break
 
         model.eval()
         losses = []
-        preds = [[], []]
-        labes = [[], []]
 
         for step, batch in enumerate(valid_dataloader):
             with torch.no_grad():
@@ -187,17 +183,6 @@ def main():
                 outputs = model(**batch)
             loss = outputs.loss
             losses.append(loss.item())
-
-            for pred in torch.argmax(logits, dim=-1).cpu():
-                preds[0].append(parser(tokenizer.decode(pred)))
-                preds[1].append(remove_tags(tokenizer.decode(pred)))
-            for lab in batch["labels"].cpu():
-                labes[0].append(parser(tokenizer.decode(lab)))
-                labes[1].append(remove_tags(tokenizer.decode(lab)))
-
-        bleui = compute(preds[0], labes[0]).values()
-        mbleui = math.fsum(bleui) / float(len(bleui))
-        mbleu = compute_bleu(preds[1], labes[1])
         losses = torch.tensor(losses)
         mloss = torch.mean(losses)
 
@@ -205,45 +190,38 @@ def main():
             best_loss = mloss
             best_epoch = epoch
 
-        logger.info(f"epoch {epoch}: loss: {mloss}; bleu: {mbleu}; bleu_intent: {mbleui}")
-        wandb.log({"loss": mloss, "bleu": mbleu, "bleu_intent": mbleui})
+        logger.info(f"epoch {epoch}: loss: {mloss}")
+        wandb.log({"loss": mloss})
         output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.5f}/"
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
-        progress_bar.update(1)
-        completed_epochs += 1
 
     best_model_dir = f"{args.directory}/checkpoint-{best_epoch}-{best_loss:.5f}/"
     model = GPT2LMHeadModel.from_pretrained(best_model_dir)
+    model.to(device)
     model.eval()
     labes = []
     for step, batch in enumerate(valid_dataloader):
         for lab in batch["labels"]:
             labes.append(lab)
-    preds = []
-    trues = []
     compute_results = []
     eos_token = tokenizer.encode(['<eos_r>'])[0]
-    for example in labes:
+    for example in tqdm(labes):
         sindex = (example == tokenizer.encode("<sos_b>")[0])
         sindex = sindex.nonzero(as_tuple=True)[0].tolist()
         eindex = (example == eos_token)
         eindex = eindex.nonzero(as_tuple=True)[0].tolist()
         for start, end in zip(sindex, eindex):
             input_ids = example[:start]
-            out = model.generate(input_ids=torch.LongTensor(input_ids).reshape(1,-1),
+            out = model.generate(input_ids=input_ids.reshape(1,-1).to(device),
                                  pad_token_id=tokenizer.eos_token_id,
                                  max_length=len(input_ids)+60,
                                  eos_token_id=eos_token)
 
             tpred = tokenizer.decode(out[0])
             ttrue = tokenizer.decode(example[:end+1])
-            preds.append(parser(tpred))
-            trues.append(parser(ttrue))
             compute_results.append({"generated": tpred, "groundtruth": ttrue})
-    bleu_result = {"bleu": compute(preds, trues)}
     with open(f"{args.directory}/examples-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(compute_results, fout, indent=2, ensure_ascii=False)
-    with open(f"{args.directory}/bleu-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(bleu_result, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()
