@@ -9,8 +9,6 @@ import logging
 import argparse
 from tqdm import tqdm
 from copy import deepcopy
-from dialogparser import parser, remove_tags
-from metrics import compute
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     GPT2Tokenizer, GPT2LMHeadModel,
@@ -28,6 +26,8 @@ handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+torch.manual_seed(0)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
@@ -74,7 +74,6 @@ def main():
         wandb.init(project=args.project_name)
         wandb.run.name = args.run_name
         wandb.config.update(args)
-        wandb.run.save()
 
     with open("data/ontology.json") as fin:
         tokens = json.load(fin)
@@ -221,7 +220,7 @@ def main():
             tpred = tokenizer.decode(out[0])
             ttrue = tokenizer.decode(example[:end+1])
             compute_results.append({"generated": tpred, "groundtruth": ttrue})
-    with open(f"{args.directory}/examples-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(compute_results, fout, indent=2, ensure_ascii=False)
+    with open(f"{args.directory}/{args.run_name}-examples-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()
