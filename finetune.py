@@ -190,7 +190,7 @@ def main():
             best_epoch = epoch
 
         logger.info(f"epoch {epoch}: loss: {mloss}")
-        wandb.log({"loss": mloss})
+        wandb.log({"val/loss": mloss, "epoch": epoch})
         output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.5f}/"
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)

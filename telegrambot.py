@@ -125,7 +125,8 @@ def telegram_bot(args):
             if 'variables' not in context.user_data: context.user_data['variables'] = {}
             if 'turn' not in context.user_data: context.user_data['turn'] = 0
             if 'msg' not in context.user_data: context.user_data['msg'] = []
-            contextmsg = context.user_data['msg'] + msg
+            context.user_data['msg'] += msg
+            contextmsg = context.user_data['msg']
 
             logging.info("[USER] "+tokenizer.decode(contextmsg))
             context_length = len(contextmsg)
@@ -138,7 +139,6 @@ def telegram_bot(args):
                 eos_token_id=tokenizer.encode(['<eos_r>'])[0])
             generated = outputs[0].cpu().numpy().tolist()
 
-            #variables = context.user_data['variables'].copy()
             decoded_output = tokenizer.decode(generated)
             user_response = update.message.text
             user_intent = get_intents(decoded_output.split('<sos_b>')[-1].split('<eos_b>')[0])
@@ -158,9 +158,6 @@ def telegram_bot(args):
                         system_action, context.user_data['turn'])
             context.user_data['turn'] += 1
 
-            print(generated)
-            print("="*80)
-            print(decoded_output)
             #print(parse_data(decoded_output))
             logging.info("[SYSTEM] "+decoded_output)
             context.bot.send_message(chat_id=update.effective_chat.id, text=system_response)
