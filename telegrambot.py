@@ -20,6 +20,13 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+connection = {
+    "host":"remotemysql.com",
+    "user":"fcjRTVuTI0",
+    "password":"rTnUuTKbvQ",
+    "database":"fcjRTVuTI0",
+}
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers "
                                     "model on a causal language modeling task")
@@ -30,7 +37,7 @@ def parse_args():
     return parser.parse_args()
 
 def initialize_table():
-    mydb = mysql.connector.connect(host="remotemysql.com", user="fcjRTVuTI0", password="rTnUuTKbvQ", database="fcjRTVuTI0")
+    mydb = mysql.connector.connect(**connection)
     create_table_dialogs = "CREATE TABLE IF NOT EXISTS dialogs (id BIGINT NOT NULL AUTO_INCREMENT, dialog_domain VARCHAR(256) NOT NULL, situation BOOLEAN NOT NULL, PRIMARY KEY (id))"
     create_table_turns = "CREATE TABLE IF NOT EXISTS turns (turn_num INT NOT NULL, id_dialog BIGINT NOT NULL, speaker VARCHAR(256) NULL, utterance VARCHAR(2048) NOT NULL, utterance_delex VARCHAR(2048) NOT NULL, intent_action VARCHAR(256) NOT NULL, PRIMARY KEY (id_dialog, turn_num), FOREIGN KEY (id_dialog) REFERENCES dialogs(id))"
     mycursor = mydb.cursor()
@@ -44,7 +51,7 @@ def initialize_table():
     mydb.close()
 
 def insert_dialog(dialog_domain):
-    mydb = mysql.connector.connect(host="remotemysql.com", user="fcjRTVuTI0", password="rTnUuTKbvQ", database="fcjRTVuTI0")
+    mydb = mysql.connector.connect(**connection)
     insert_query = "INSERT INTO dialogs (dialog_domain, situation) VALUES (%s, %s)"
     values = (dialog_domain, 0)
     mycursor = mydb.cursor()
@@ -56,7 +63,7 @@ def insert_dialog(dialog_domain):
 
 def insert_turn(id_dialog, speaker, utterance,
                 utterance_delex, intent_action, turn_num):
-    mydb = mysql.connector.connect(host="remotemysql.com", user="fcjRTVuTI0", password="rTnUuTKbvQ", database="fcjRTVuTI0")
+    mydb = mysql.connector.connect(**connection)
     insert_query = "INSERT INTO turns (id_dialog, turn_num, speaker, utterance, utterance_delex, intent_action) VALUES (%s, %s, %s, %s, %s, %s)"
     values = (id_dialog, turn_num, speaker, utterance, utterance_delex, intent_action)
     mycursor = mydb.cursor()
@@ -65,7 +72,7 @@ def insert_turn(id_dialog, speaker, utterance,
     mydb.close()
 
 def update_situation(id_dialog, situation):
-    mydb = mysql.connector.connect(host="remotemysql.com", user="fcjRTVuTI0", password="rTnUuTKbvQ", database="fcjRTVuTI0")
+    mydb = mysql.connector.connect(**connection)
     update_query = "UPDATE dialogs SET situation = "+str(situation)+" WHERE id = "+str(id_dialog)
     mycursor = mydb.cursor()
     mycursor.execute(update_query)
@@ -87,21 +94,19 @@ def telegram_bot(args):
         initialize_table()
 
         def start(update, context):
-            #context.bot.send_message(chat_id=update.effective_chat.id,
-            #                         text="Hi. I am a Ze Carioca, how can I help you?")
-            response = "Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
-            response += "Ao final avalie a nossa conversa, utilizando a tag /correct quando eu me comporto adequadamente "
-            response += "e /incorrect quando o meu comportamento saiu do esperado. "
-            response += "O domínio da nossa conversa é "+args.dialog_domain+"."
+            response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
+            "Ao final avalie a nossa conversa, utilizando a tag /correct "
+            "quando eu me comporto adequadamente e /incorrect quando o meu "
+            "comportamento saiu do esperado. O domínio da nossa conversa é "
+            +args.dialog_domain+".")
             context.bot.send_message(chat_id=update.effective_chat.id, text=response)
 
         def restart(update, context):
-            #context.bot.send_message(chat_id=update.effective_chat.id,
-            #                         text="Hi. I am a Ze Carioca, how can I help you?")
-            response = "Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
-            response += "Ao final avalie a nossa conversa, utilizando a tag /correct quando eu me comporto adequadamente "
-            response += "e /incorrect quando o meu comportamento saiu do esperado. "
-            response += "O domínio da nossa conversa é "+args.dialog_domain+"."
+            response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
+            "Ao final avalie a nossa conversa, utilizando a tag /correct "
+            "quando eu me comporto adequadamente e /incorrect quando o meu "
+            "comportamento saiu do esperado. O domínio da nossa conversa é "
+            +args.dialog_domain+".")
             context.bot.send_message(chat_id=update.effective_chat.id, text=response)
             if 'id' in context.user_data: context.user_data.pop('id')
             if 'variables' in context.user_data: context.user_data.pop('variables')
@@ -119,12 +124,12 @@ def telegram_bot(args):
                                      text="Diálogo incorreto adicionado com sucesso! Obrigada!")
 
         def reply(update, context):
-            msg = '<sos_u>'+update.message.text.lower()+'<eos_u>'
-            msg = tokenizer.encode(msg, add_special_tokens=True)
             if 'id' not in context.user_data: context.user_data['id'] = insert_dialog(args.dialog_domain)
             if 'variables' not in context.user_data: context.user_data['variables'] = {}
             if 'turn' not in context.user_data: context.user_data['turn'] = 0
             if 'msg' not in context.user_data: context.user_data['msg'] = []
+            msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
+            msg = tokenizer.encode(msg, add_special_tokens=True)
             context.user_data['msg'] += msg
             contextmsg = context.user_data['msg']
 
@@ -135,32 +140,41 @@ def telegram_bot(args):
             outputs = model.generate(input_ids=torch.LongTensor(
                 contextmsg).reshape(1,-1),
                 max_length=context_length+max_len, temperature=0.7,
-                pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=tokenizer.encode(['<eos_r>'])[0])
-            generated = outputs[0].cpu().numpy().tolist()
+                pad_token_id=tokenizer.eos_token_id, use_cache=True,
+                eos_token_id=tokenizer.encode(['<eos_b>'])[0])
+            generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
+            logging.info("[DEBUG] "+decoded_output)
+            action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
+            action_db = tokenizer.encode(action_db, add_special_tokens=True)
+            outputs = model.generate(input_ids=torch.LongTensor(
+                generated+action_db).reshape(1,-1),
+                max_length=context_length+max_len, temperature=0.7,
+                pad_token_id=tokenizer.eos_token_id, use_cache=True,
+                eos_token_id=tokenizer.encode(['<eos_r>'])[0])
+            generated = outputs[0].numpy().tolist()
+
+            decoded_output = tokenizer.decode(generated)
+            for k,v in trans:
+                decoded_output = decoded_output.replace(k,v,1)
+
             user_response = update.message.text
             user_intent = get_intents(decoded_output.split('<sos_b>')[-1].split('<eos_b>')[0])
-            #user_delex, user_response, variables = anonymization(user_response, variables, False)
-            insert_turn(context.user_data['id'], "client", user_response, user_response,
-                        user_intent, context.user_data['turn'])
+            insert_turn(context.user_data['id'], "client", user_response,
+                        user_response, user_intent, context.user_data['turn'])
             context.user_data['turn'] += 1
 
             system_response = decoded_output.split('<sos_r>')[-1].split('<eos_r>')[0]
             system_action = get_intents(decoded_output.split('<sos_a>')[-1].split('<eos_a>')[0])
-            #system_delex, system_response, variables = anonymization(system_response, variables, False)
-            #valid, system_response, new_action = request_db(args.dialog_domain, system_delex, variables)
-            #if (valid): context.user_data['msg'] = contextmsg + tokenizer.encode(system_response, add_special_tokens=True)
-            #else: system_action = new_action
-            #context.user_data['variables'] = variables
-            insert_turn(context.user_data['id'], "agent", system_response, system_response,
-                        system_action, context.user_data['turn'])
+            insert_turn(context.user_data['id'], "agent", system_response,
+                        system_response, system_action,
+                        context.user_data['turn'])
             context.user_data['turn'] += 1
 
-            #print(parse_data(decoded_output))
             logging.info("[SYSTEM] "+decoded_output)
-            context.bot.send_message(chat_id=update.effective_chat.id, text=system_response)
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text=system_response)
 
         start_handler = CommandHandler('start', start)
         dispatcher.add_handler(start_handler)

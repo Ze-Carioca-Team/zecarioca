@@ -2,6 +2,8 @@
 # coding: utf-8
 import json
 import random
+from dialogparser import get_belief
+import mysql.connector
 
 db_data = {
     'host': "remotemysql.com",
@@ -9,36 +11,36 @@ db_data = {
     'password': "rTnUuTKbvQ",
     'database': "fcjRTVuTI0"
 }
+
+action_string = "<sos_a>{}<eos_a>"
+
 with open('type_request.json') as filer:
     type_request = json.load(filer)
 
-def request_db (dialog_domain, sentence, variables):
-    response = sentence
-    if (dialog_domain in type_request.keys()):
-        for typer in type_request[dialog_domain]:
-            for value in typer["result"]:
-                if (value in response):
-                    query = typer["query"]
-                    for param in typer["parameters"]:
-                        if (param[0] in variables.keys()):
-                            if (param[1] == 1):
-                                query = query.replace("["+param[0]+"]", "'"+variables[param[0]]+"'")
-                            else: query = query.replace("["+param[0]+"]", variables[param[0]])
-                        else:
-                            default_sample = random.sample(typer["default"], k = 1)[0]
-                            return False, default_sample[0], default_sample[1]
-
-                    mydb = mysql.connector.connect(host=db_data['host'], user=db_data['user'],
-                                                   password=db_data['password'], database=db_data['database'])
-                    mycursor = mydb.cursor()
-                    mycursor.execute(query)
-                    try:
-                        result = mycursor.fetchall()[0][0]
-                        rformat = random.sample(typer["format"], k = 1)[0]
-                        response = response.replace(value, rformat.replace("[???]", str(result)))
-                        return True, response, ""
-                    except:
-                        default_sample = random.sample(typer["default"], k = 1)[0]
-                        return False, default_sample[0], default_sample[1]
-    else: return True, response, ""
-    return True, response, ""
+def request_db(belief):
+    intent, entity = get_belief(belief)
+    dialog_domain = intent.split()[0]
+    if dialog_domain in type_request:
+        reqs = type_request[dialog_domain]
+        parameters = {p:p in entity.keys() for p in reqs["parameters"]}
+        if all(parameters.values()):
+            query = reqs["query"]
+            for k, v in entity.items():
+                query = query.replace(f"[{k}]", f"\'{v}\'")
+            mydb = mysql.connector.connect(**db_data)
+            mycursor = mydb.cursor()
+            mycursor.execute(query)
+            result = mycursor.fetchall()
+            if result:
+                action = action_string.format("[info_valor]")
+                valor = random.choice(reqs["format"]).format(result[0][0])
+                return action, [("[valor]", valor)]
+            else:
+                action = action_string.format("[invalido]")
+                return action, []
+        else:
+            action = "".join([f"[req_{k}]" for (k,v) in parameters.items() if not v])
+            action = action_string.format(action)
+            return action, []
+    else:
+        return "", []

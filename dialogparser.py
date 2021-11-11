@@ -1,5 +1,11 @@
 import re
 
+def get_belief(sentence):
+    intent = " ".join(re.compile(r'\[\S+\]').findall(sentence))
+    entity = [w for w in sentence.split() if not w.startswith(('<', '['))]
+    entity = dict(zip(entity[0::2], entity[1::2]))
+    return intent, entity
+
 def get_intents(sentence):
     result = " ".join(re.compile(r'\[\S+\]').findall(sentence))
     return result
