@@ -32,7 +32,7 @@ def request_db(belief):
             mycursor.execute(query)
             result = mycursor.fetchall()
             if result:
-                action = action_string.format("[info_valor]")
+                action = action_string.format("[info_valor][req_mais]")
                 valor = random.choice(reqs["format"]).format(result[0][0])
                 return action, [("[valor]", valor)]
             else:
