@@ -1,4 +1,5 @@
-*.json
+telegram.json
+data/
 wandb/
 venv/
 models/
