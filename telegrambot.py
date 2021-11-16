@@ -129,9 +129,8 @@ def telegram_bot(args):
             if 'turn' not in context.user_data: context.user_data['turn'] = 0
             if 'msg' not in context.user_data: context.user_data['msg'] = []
             msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
-            msg = tokenizer.encode(msg, add_special_tokens=True)
             context.user_data['msg'] += msg
-            contextmsg = context.user_data['msg']
+            contextmsg = tokenizer.encode(context.user_data['msg'], add_special_tokens=True)
 
             context_length = len(contextmsg)
             max_len=60
@@ -153,9 +152,9 @@ def telegram_bot(args):
                 pad_token_id=tokenizer.eos_token_id, use_cache=True,
                 eos_token_id=tokenizer.encode(['<eos_r>'])[0])
             generated = outputs[0].numpy().tolist()
+            context.user_data['msg'] += generated
 
             decoded_output = tokenizer.decode(generated)
-            context.user_data['msg'] += decoded_output
             for k,v in trans:
                 decoded_output = decoded_output.replace(k,v,1)
 
