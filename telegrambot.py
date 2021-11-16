@@ -127,11 +127,11 @@ def telegram_bot(args):
             if 'id' not in context.user_data: context.user_data['id'] = insert_dialog(args.dialog_domain)
             if 'variables' not in context.user_data: context.user_data['variables'] = {}
             if 'turn' not in context.user_data: context.user_data['turn'] = 0
-            if 'msg' not in context.user_data: context.user_data['msg'] = []
+            if 'msg' not in context.user_data: context.user_data['msg'] = ""
             msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
             context.user_data['msg'] += msg
+            logging.info("[USER] " + msg)
             contextmsg = tokenizer.encode(context.user_data['msg'], add_special_tokens=True)
-
             context_length = len(contextmsg)
             max_len=60
 
@@ -143,8 +143,10 @@ def telegram_bot(args):
             generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
+            context.user_data['msg'] += decoded_output
+            
             action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
-            logging.info("[DATABASE] " + str(trans))
+            logging.info("[DATABASE] " + action_db + str(trans))
             action_db = tokenizer.encode(action_db, add_special_tokens=True)
             outputs = model.generate(input_ids=torch.LongTensor(
                 generated+action_db).reshape(1,-1),
@@ -152,7 +154,6 @@ def telegram_bot(args):
                 pad_token_id=tokenizer.eos_token_id, use_cache=True,
                 eos_token_id=tokenizer.encode(['<eos_r>'])[0])
             generated = outputs[0].numpy().tolist()
-            context.user_data['msg'] += generated
 
             decoded_output = tokenizer.decode(generated)
             for k,v in trans:
