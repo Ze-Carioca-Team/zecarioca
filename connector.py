@@ -36,7 +36,7 @@ def request_db(belief):
                 valor = random.choice(reqs["format"]).format(result[0][0])
                 return action, [("[valor]", valor)]
             else:
-                action = action_string.format("[invalido]")
+                action = action_string.format("[invalido][req_cpf][req_placa]")
                 return action, []
         else:
             action = "".join([f"[req_{k}]" for (k,v) in parameters.items() if not v])

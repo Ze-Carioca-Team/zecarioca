@@ -133,7 +133,6 @@ def telegram_bot(args):
             context.user_data['msg'] += msg
             contextmsg = context.user_data['msg']
 
-            logging.info("[USER] "+tokenizer.decode(contextmsg))
             context_length = len(contextmsg)
             max_len=60
 
@@ -146,7 +145,7 @@ def telegram_bot(args):
 
             decoded_output = tokenizer.decode(generated)
             action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
-            logging.info("[DATABASE] "+str(trans))
+            logging.info("[DATABASE] " + str(trans))
             action_db = tokenizer.encode(action_db, add_special_tokens=True)
             outputs = model.generate(input_ids=torch.LongTensor(
                 generated+action_db).reshape(1,-1),
@@ -156,6 +155,7 @@ def telegram_bot(args):
             generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
+            context.user_data['msg'] += decoded_output
             for k,v in trans:
                 decoded_output = decoded_output.replace(k,v,1)
 
