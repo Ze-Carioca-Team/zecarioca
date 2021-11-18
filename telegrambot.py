@@ -143,7 +143,7 @@ def telegram_bot(args):
             generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
-            context.user_data['msg'] += decoded_output
+            context.user_data['msg'] = decoded_output
 
             action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
             logging.info("[DATABASE] " + action_db + str(trans))
