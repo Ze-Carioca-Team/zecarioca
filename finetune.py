@@ -51,7 +51,7 @@ def parse_args():
         help="A json file containing the validation data.")
     parser.add_argument("--learning_rate", type=float, default=2e-5,
         help="Initial learning rate to use.")
-    parser.add_argument("--weight_decay", type=float, default=0.01,
+    parser.add_argument("--weight_decay", type=float, default=0.1,
         help="Weight decay to use.")
     parser.add_argument("--num_train_epochs", type=int, default=None,
         help="Total number of training epochs to perform.")
@@ -69,7 +69,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    if (args.initial_epoch != 0): wandb.init(id=args.run_id, project=args.project_name, resume=True)
+    if (args.initial_epoch != 0): wandb.init(project=args.project_name, resume=True)
     else:
         wandb.init(project=args.project_name)
         wandb.run.name = args.run_name
@@ -100,6 +100,7 @@ def main():
 
     train_dataset = tokenized["train"]
     valid_dataset = tokenized["valid"]
+
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, batch_size=args.batch_size,
         collate_fn=default_data_collator
@@ -220,7 +221,9 @@ def main():
             tpred = tokenizer.decode(out[0])
             ttrue = tokenizer.decode(example[:end+1])
             compute_results.append({"generated": tpred, "groundtruth": ttrue})
-    with open(f"{args.directory}/{args.run_name}-examples-{best_epoch}-{best_loss:.5f}.json", "w") as fout: json.dump(compute_results, fout, indent=2, ensure_ascii=False)
+    with open(f"{args.directory}/{args.run_name}-examples-{best_epoch}-"
+               "{best_loss:.5f}.json", "w") as fout:
+        json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
     main()

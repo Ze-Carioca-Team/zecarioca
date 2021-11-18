@@ -22,19 +22,26 @@ train_files, validation_files = train_test_split(glob.glob(files)[:2],
 
 datasets = load_dataset("parquet", data_files={"train": train_files,
                                                "validation": validation_files})
-datasets = datasets.filter(lambda x: x['text'] is not None and x['reply'] is\
-                           not None and len(x['text']+x['reply']) < 10000)
-datasets = datasets.files(lambda x: x['text'].endswith((".", "?", "!")) and\
-                          x['reply'].endswith((".", "?", "!")))
+datasets = datasets.filter(
+    lambda x: x['text'] is not None and x['reply'] is not None)
+datasets = datasets.filter(
+    lambda x: len(x['text']) > 3 and len(x['reply']) > 3\
+    and len(x['text']+x['reply']) < 240)
+datasets = datasets.files(
+    lambda x: x['text'].endswith((".", "?", "!")) and\
+    x['reply'].endswith((".", "?", "!")))
 
-special_tokens = ["<sos_u>", "<eos_u>", "<sos_r>", "<eos_r>"]
+special_tokens = ["<sos_u>", "<eos_u>",
+                  "<sos_b>", "<eos_b>",
+                  "<sos_r>", "<eos_r>"]
 tokenizer.add_special_tokens({'additional_special_tokens': special_tokens})
 model.resize_token_embeddings(len(tokenizer))
 
 def tokenize_function(examples):
     question =  "<sos_u> "+examples["text"]+" <eos_u>"
+    topic = "<sos_b> "+examples["topic"]+" <eos_b>"
     answer = "<sos_r> "+examples["reply"]+" <eos_r>"
-    return tokenizer(question+answer)
+    return tokenizer(question+topic+answer)
 
 tokenized_datasets = parsed_datasets.map(
     tokenize_function,

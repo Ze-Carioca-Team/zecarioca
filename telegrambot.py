@@ -129,11 +129,11 @@ def telegram_bot(args):
             if 'turn' not in context.user_data: context.user_data['turn'] = 0
             if 'msg' not in context.user_data: context.user_data['msg'] = ""
             msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
-            context.user_data['msg'] += msg
             logging.info("[USER] " + msg)
-            contextmsg = tokenizer.encode(context.user_data['msg'], add_special_tokens=True)
+            contextmsg = tokenizer.encode(context.user_data['msg'] + msg,
+                                          add_special_tokens=True)
             context_length = len(contextmsg)
-            max_len=60
+            max_len=80
 
             outputs = model.generate(input_ids=torch.LongTensor(
                 contextmsg).reshape(1,-1),
@@ -144,7 +144,7 @@ def telegram_bot(args):
 
             decoded_output = tokenizer.decode(generated)
             context.user_data['msg'] += decoded_output
-            
+
             action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
             logging.info("[DATABASE] " + action_db + str(trans))
             action_db = tokenizer.encode(action_db, add_special_tokens=True)
