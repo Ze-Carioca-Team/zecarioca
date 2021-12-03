@@ -1,6 +1,7 @@
 import re
 
 def get_belief(sentence):
+    sentence = sentence.replace(" cpf", " cpf ")
     intent = " ".join(re.compile(r'\[\S+\]').findall(sentence))
     entity = [w for w in sentence.split() if not w.startswith(('<', '['))]
     entity = dict(zip(entity[0::2], entity[1::2]))

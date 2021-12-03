@@ -1,8 +1,9 @@
 {
   "[consulta_saldo]": {
       "result": ["[valor]", "[valor_monetario]"],
-      "parameters": ["cpf", "placa"],
-      "query": "SELECT balance FROM clients c WHERE LOWER(cpf) = [cpf] AND LOWER(plate) = [placa]",
+      "parameters": ["cpf"],
+      "query": "SELECT balance FROM clients c WHERE LOWER(cpf) = [cpf]",
+      "query2": "SELECT balance FROM clients c WHERE LOWER(cpf) = [cpf] AND LOWER(plate) = [placa]",
       "default": [
         ["Saldo não disponível no banco de dados. Informe CPF e placa válidos, por gentileza.", "[saldo_indisponivel][req_cpf][req_placa]"],
         ["O saldo não foi encontrado. Por favor indique CPF e placa registrados no sistema.", "[saldo_indisponivel][req_cpf][req_placa]"]

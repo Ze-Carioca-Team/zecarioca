@@ -24,19 +24,23 @@ def request_db(belief):
         reqs = type_request[dialog_domain]
         parameters = {p:p in entity.keys() for p in reqs["parameters"]}
         if all(parameters.values()):
-            query = reqs["query"]
+            query = reqs["query2"] if "placa" in parameters else reqs["query"]
             for k, v in entity.items():
                 query = query.replace(f"[{k}]", f"\'{v}\'")
             mydb = mysql.connector.connect(**db_data)
             mycursor = mydb.cursor()
             mycursor.execute(query)
             result = mycursor.fetchall()
-            if result:
+            if len(result) > 1:
+                action = action_string.format("[req_placa]")
+                parameters["placa"] = False
+                return action, []
+            elif result:
                 action = action_string.format("[info_valor][req_mais]")
                 valor = random.choice(reqs["format"]).format(result[0][0])
                 return action, [("[valor]", valor)]
             else:
-                action = action_string.format("[invalido][req_cpf][req_placa]")
+                action = action_string.format("[invalido][req_cpf]")
                 return action, []
         else:
             action = "".join([f"[req_{k}]" for (k,v) in parameters.items() if not v])

@@ -222,7 +222,7 @@ def main():
             ttrue = tokenizer.decode(example[:end+1])
             compute_results.append({"generated": tpred, "groundtruth": ttrue})
     with open(f"{args.directory}/{args.run_name}-examples-{best_epoch}-"
-               "{best_loss:.5f}.json", "w") as fout:
+              f"{best_loss:.5f}.json", "w") as fout:
         json.dump(compute_results, fout, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":

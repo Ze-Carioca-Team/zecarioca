@@ -33,7 +33,7 @@ def main():
                         intents += [slot, t[0]['slot-values'][slot]]
                 try:
                     bs = [t[0]['intent']] + intents
-                    belief = "<sos_b> " + " ".join(bs).lower() + " <eos_b>"
+                    belief = "<sos_b> " + t[0].get('domain','') + " ".join(bs).lower() + " <eos_b>"
                     action = "<sos_a> " + t[1]['action'] + " <eos_a>"
                 except:
                     print(t)
@@ -41,23 +41,13 @@ def main():
                 response = f"<sos_r> {t[1]['utterance_delex']} <eos_r>"
                 dialog += utterance+belief+action+response
             dialogues.append({'id':d['id'], 'text':dialog})
-            # dialogues.append({'id':d['id'], 'text':dialog, 'mwoz': parser(dialog)})
         random.shuffle(dialogues)
-        f1 = open("data/process.train.json", "w")
-        f2 = open("data/process.valid.json", "w")
-        f3 = open("data/ontology.json", "w")
-        json.dump(tokens, f3)
-        c1, c2 = 0, 0
-        for i, line in enumerate(dialogues):
-            if not line['id'].endswith(("1", "2", "3")):
-                print(json.dumps(line), file=f1)
-                c1 +=1
-            else:
-                print(json.dumps(line), file=f2)
-                c2 +=1
-        print("train size:", c1, "test size:", c2)
-        f1.close()
-        f2.close()
+        fname = args.file.replace('out.dialogs', 'process')
+        with open("data/ontology.json", "w") as fonto:
+            json.dump(tokens, fonto)
+        with open(fname, "w") as fdata:
+            for i, line in enumerate(dialogues):
+                print(json.dumps(line), file=fdata)
 
 if __name__ == "__main__":
     main()

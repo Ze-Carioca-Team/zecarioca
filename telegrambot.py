@@ -5,6 +5,7 @@ import torch
 import logging
 import argparse
 import mysql.connector
+from dialogparser import get_intents
 from connector import request_db
 from deanonymization import anonymization
 from telegram import Update
@@ -78,10 +79,6 @@ def update_situation(id_dialog, situation):
     mycursor.execute(update_query)
     mydb.commit()
     mydb.close()
-
-def get_intents(sentence):
-    result = "".join(re.compile(r'\[\S+\]').findall(sentence))
-    return result
 
 def telegram_bot(args):
     with open('telegram.json') as fin: api = json.load(fin)
