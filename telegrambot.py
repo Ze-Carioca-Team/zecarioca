@@ -121,53 +121,38 @@ def telegram_bot(args):
                                      text="Diálogo incorreto adicionado com sucesso! Obrigada!")
 
         def reply(update, context):
-            if 'id' not in context.user_data: context.user_data['id'] = insert_dialog(args.dialog_domain)
-            if 'variables' not in context.user_data: context.user_data['variables'] = {}
-            if 'turn' not in context.user_data: context.user_data['turn'] = 0
             if 'msg' not in context.user_data: context.user_data['msg'] = ""
+
             msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
-            logging.info("[USER] " + msg)
-            contextmsg = tokenizer.encode(context.user_data['msg'] + msg,
-                                          add_special_tokens=True)
+            logging.info("[USER] " + context.user_data['msg'])
+            contextmsg = tokenizer.encode(context.user_data['msg']+msg)
             context_length = len(contextmsg)
             max_len=80
 
             outputs = model.generate(input_ids=torch.LongTensor(
                 contextmsg).reshape(1,-1),
-                max_length=context_length+max_len, temperature=0.7,
-                pad_token_id=tokenizer.eos_token_id, use_cache=True,
+                max_length=context_length+max_len,
+                pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.encode(['<eos_b>'])[0])
             generated = outputs[0].numpy().tolist()
-
             decoded_output = tokenizer.decode(generated)
-            context.user_data['msg'] = decoded_output
 
             action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
             logging.info("[DATABASE] " + action_db + str(trans))
-            action_db = tokenizer.encode(action_db, add_special_tokens=True)
+            action_db = tokenizer.encode(action_db)
             outputs = model.generate(input_ids=torch.LongTensor(
                 generated+action_db).reshape(1,-1),
-                max_length=context_length+max_len, temperature=0.7,
-                pad_token_id=tokenizer.eos_token_id, use_cache=True,
+                max_length=context_length+max_len,
+                pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.encode(['<eos_r>'])[0])
             generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
+            context.user_data['msg'] += decoded_output
             for k,v in trans:
                 decoded_output = decoded_output.replace(k,v,1)
 
-            user_response = update.message.text
-            user_intent = get_intents(decoded_output.split('<sos_b>')[-1].split('<eos_b>')[0])
-            insert_turn(context.user_data['id'], "client", user_response,
-                        user_response, user_intent, context.user_data['turn'])
-            context.user_data['turn'] += 1
-
             system_response = decoded_output.split('<sos_r>')[-1].split('<eos_r>')[0]
-            system_action = get_intents(decoded_output.split('<sos_a>')[-1].split('<eos_a>')[0])
-            insert_turn(context.user_data['id'], "agent", system_response,
-                        system_response, system_action,
-                        context.user_data['turn'])
-            context.user_data['turn'] += 1
 
             logging.info("[SYSTEM] "+decoded_output)
             context.bot.send_message(chat_id=update.effective_chat.id,

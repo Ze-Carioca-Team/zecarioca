@@ -19,12 +19,12 @@ with open('type_request.json') as filer:
 
 def request_db(belief):
     intent, entity = get_belief(belief)
+    print(intent, entity)
     dialog_domain = intent.split()[0]
     if dialog_domain in type_request:
         reqs = type_request[dialog_domain]
-        parameters = {p:p in entity.keys() for p in reqs["parameters"]}
-        if all(parameters.values()):
-            query = reqs["query2"] if "placa" in parameters else reqs["query"]
+        if "cpf" in entity:
+            query = reqs["query2"] if "placa" in entity else reqs["query"]
             for k, v in entity.items():
                 query = query.replace(f"[{k}]", f"\'{v}\'")
             mydb = mysql.connector.connect(**db_data)
@@ -33,7 +33,6 @@ def request_db(belief):
             result = mycursor.fetchall()
             if len(result) > 1:
                 action = action_string.format("[req_placa]")
-                parameters["placa"] = False
                 return action, []
             elif result:
                 action = action_string.format("[info_valor][req_mais]")
@@ -43,8 +42,7 @@ def request_db(belief):
                 action = action_string.format("[invalido][req_cpf]")
                 return action, []
         else:
-            action = "".join([f"[req_{k}]" for (k,v) in parameters.items() if not v])
-            action = action_string.format(action)
+            action = action_string.format("[req_cpf]")
             return action, []
     else:
         return "", []

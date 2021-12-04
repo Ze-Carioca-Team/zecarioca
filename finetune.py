@@ -158,12 +158,14 @@ def main():
             if (args.resume_path == None): model.train()
             else: model.train(resume_from_checkpoint=str(args.resume_path))
         except: model.train()
+        running_loss = []
 
         for step, batch in enumerate(train_dataloader):
             batch = {k: v.to(device) for k, v in batch.items()}
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
+            running_loss.append(loss.item())
             loss.backward()
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -173,6 +175,10 @@ def main():
                 progress_bar.update(1)
                 completed_steps += 1
             if completed_steps >= args.max_train_steps: break
+        losses = torch.tensor(running_loss)
+        mloss = torch.mean(losses)
+        logger.info(f"train epoch {epoch}: loss: {mloss}")
+        wandb.log({"train/loss": mloss, "epoch": epoch})
 
         model.eval()
         losses = []
@@ -190,7 +196,7 @@ def main():
             best_loss = mloss
             best_epoch = epoch
 
-        logger.info(f"epoch {epoch}: loss: {mloss}")
+        logger.info(f"eval epoch {epoch}: loss: {mloss}")
         wandb.log({"val/loss": mloss, "epoch": epoch})
         output_dir = f"{args.directory}/checkpoint-{epoch}-{mloss:.5f}/"
         model.save_pretrained(output_dir)

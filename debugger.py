@@ -19,8 +19,7 @@ def main():
     text = ""
     eos_token = tokenizer.encode(['<eos_r>'])[0]
     for line in sys.stdin:
-        text += "<sos_u>"+line+"<eos_u>"
-        input_ids = tokenizer.encode(text)
+        input_ids = tokenizer.encode(text + "<sos_u>"+line+"<eos_u>")
         out = model.generate(input_ids=torch.LongTensor(input_ids).reshape(1,-1),
                              pad_token_id=tokenizer.eos_token_id,
                              max_length=len(input_ids)+60,
