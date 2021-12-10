@@ -148,7 +148,7 @@ def telegram_bot(args):
             generated = outputs[0].numpy().tolist()
 
             decoded_output = tokenizer.decode(generated)
-            context.user_data['msg'] += decoded_output
+            context.user_data['msg'] = decoded_output
             for k,v in trans:
                 decoded_output = decoded_output.replace(k,v,1)
 
