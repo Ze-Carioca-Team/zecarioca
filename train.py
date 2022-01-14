@@ -17,7 +17,7 @@ BLOCK_SIZE = 128
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 model = GPT2LMHeadModel.from_pretrained(checkpoint)
 
-train_files, validation_files = train_test_split(glob.glob(files)[:2],
+train_files, validation_files = train_test_split(glob.glob(files),
                                                  test_size=0.1)
 
 datasets = load_dataset("parquet", data_files={"train": train_files,
@@ -27,7 +27,7 @@ datasets = datasets.filter(
 datasets = datasets.filter(
     lambda x: len(x['text']) > 3 and len(x['reply']) > 3\
     and len(x['text']+x['reply']) < 240)
-datasets = datasets.files(
+datasets = datasets.filter(
     lambda x: x['text'].endswith((".", "?", "!")) and\
     x['reply'].endswith((".", "?", "!")))
 
@@ -37,18 +37,18 @@ special_tokens = ["<sos_u>", "<eos_u>",
 tokenizer.add_special_tokens({'additional_special_tokens': special_tokens})
 model.resize_token_embeddings(len(tokenizer))
 
-def tokenize_function(examples):
-    question =  "<sos_u> "+examples["text"]+" <eos_u>"
-    topic = "<sos_b> "+examples["topic"]+" <eos_b>"
-    answer = "<sos_r> "+examples["reply"]+" <eos_r>"
-    return tokenizer(question+topic+answer)
+def prefix_function(examples):
+    examples["text"] =  "<sos_u> "+examples["text"]+" <eos_u>"
+    examples["topic"] = "<sos_b> "+examples["topic"]+" <eos_b>"
+    examples["reply"] = "<sos_r> "+examples["reply"]+" <eos_r>"
+    return examples
 
-tokenized_datasets = parsed_datasets.map(
-    tokenize_function,
-    num_proc=8,
-    batched=True,
-    remove_columns=["id", "text", "reply"])
-    # remove_columns=["id", "text", "reply", "__index_level_0__"])
+datasets = datasets.map(prefix_function)
+
+def tokenizer_function(examples):
+    return tokenizer(examples["text"]+examples["topic"]+examples["reply"])
+
+datasets = datasets.map(tokenizer_function)
 
 def group_texts(examples):
     concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
@@ -60,7 +60,7 @@ def group_texts(examples):
     result["labels"] = result["input_ids"].copy()
     return result
 
-lm_datasets = tokenized_datasets.map(
+lm_datasets = datasets.map(
     group_texts,
     batched=True,
     num_proc=4)
