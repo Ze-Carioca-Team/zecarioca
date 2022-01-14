@@ -13,14 +13,14 @@ random.shuffle(files)
 frames = []
 counter = 0
 
-for filein in tqdm.tqdm(files[:100000]):
+for filein in tqdm.tqdm(files):
     counter += 1
     df = pd.read_csv(filein, delimiter='\t', quoting=3, header=None,
                      names=["timestamp", "id", "text"])
     df.drop(columns=['timestamp'], inplace=True)
     df['reply'] = df['text'].shift(-1)
     df = df.iloc[:-1]
-    df.drop(df[df.text.str.len() < 3 | df.reply.str.len() < 3].index,
+    df.drop(df[(df.text.str.len() < 3) | (df.reply.str.len() < 3)].index,
             inplace=True)
     df.drop(df[df.text.str.contains(r'[^0-9a-zA-Z\.\,\?\!]') |
             df.reply.str.contains(r'[^0-9a-zA-Z\.\,\?\!]')].index,

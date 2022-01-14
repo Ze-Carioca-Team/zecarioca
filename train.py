@@ -11,7 +11,7 @@ from transformers import Trainer, TrainingArguments
 from datasets import load_dataset, load_metric
 
 files = "clear_threads/*.parquet"
-checkpoint = "pierreguillou/gpt2-small-portuguese"
+checkpoint = "models/pratofeito"
 BLOCK_SIZE = 128
 
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
