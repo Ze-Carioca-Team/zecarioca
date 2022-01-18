@@ -24,7 +24,7 @@ for filein in tqdm.tqdm(files):
     df['reply'] = df['text'].shift(-1)
     df = df.iloc[:-1]
     namethr, namesub = ids[tid]
-    if namethr == "36":
+    if int(namethr) >= 36:
         continue
     df['topic'] = names[namethr]["name"].lower()+" "+names[namethr]["subs"][namesub].lower()
     try:
