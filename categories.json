@@ -1,0 +1,65 @@
+{
+  "3": {
+    "name": "Telecomunica\u00e7\u00f5es",
+    "subs": {
+      "0": "Smartphones, Tablets e outros dispositivos m\u00f3veis",
+      "1": "TV por Assinatura e Monitoramento de v\u00eddeo",
+      "2": "Internet & Redes"
+    }
+  },
+  "8": {
+    "name": "Eletr\u00f4nicos",
+    "subs": {
+      "4": "Aparelhos de TV",
+      "5": "\u00c1udio, Home Theater e DVD",
+      "6": "MP3, MP4, Ipod e GPS",
+      "7": "C\u00e2meras Digitais, Filmadoras e T\u00e9cnicas relacionad"
+    }
+  },
+  "19": {
+    "name": "Hardwares",
+    "subs": {
+      "9": "Refrigera\u00e7\u00e3o de componentes",
+      "10": "Notebooks",
+      "11": "CPU\u00b4s, Placas-m\u00e3e e Mem\u00f3rias",
+      "12": "Placas de v\u00eddeo e Monitores",
+      "13": "\u00c1udio PC",
+      "14": "Armazenamento",
+      "15": "Gabinetes e Case Mod",
+      "16": "Energia",
+      "17": "Overclocks",
+      "18": "Perif\u00e9ricos e Acess\u00f3rios"
+    }
+  },
+  "23": {
+    "name": "Diversos",
+    "subs": {
+      "20": "3D Stereo",
+      "21": "\u00c1rea Mac",
+      "22": "Design, Desenvolvimento e Banco de Dados"
+    }
+  },
+  "26": {
+    "name": "Sistemas Operacionais",
+    "subs": {
+      "24": "\u00c1rea Windows",
+      "25": "\u00c1rea Linux e Open Source"
+    }
+  },
+  "32": {
+    "name": "Games",
+    "subs": {
+      "27": "PC",
+      "28": "Consoles",
+      "29": "Mobile",
+      "30": "Retr\u00f4",
+      "31": "E-Sports"
+    }
+  },
+  "34": {
+    "name": "Classificados",
+    "subs": {
+      "33": "Vagas de Emprego"
+    }
+  }
+}
