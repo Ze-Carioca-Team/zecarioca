@@ -22,7 +22,8 @@ train_files, validation_files = train_test_split(glob.glob(files),
                                                  test_size=0.1)
 
 datasets = load_dataset("parquet", data_files={"train": train_files,
-                                               "validation": validation_files})
+                                               "validation": validation_files},
+                        cache_dir="proc_data")
 datasets = datasets.filter(
     lambda x: x['text'] is not None and x['reply'] is not None)
 datasets = datasets.filter(
@@ -53,8 +54,7 @@ datasets = datasets.map(
 )
 
 def tokenizer_function(examples):
-    return tokenizer(examples["encoded"], truncation=True, padding="max_length",
-                     max_length=block_size)
+    return tokenizer(examples["encoded"])
 
 column_names = datasets["train"].column_names
 
