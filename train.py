@@ -24,6 +24,7 @@ train_files, validation_files = train_test_split(glob.glob(files),
 datasets = load_dataset("parquet", data_files={"train": train_files,
                                                "validation": validation_files},
                         cache_dir="proc_data")
+print("Filtering data.")
 datasets = datasets.filter(
     lambda x: x['text'] is not None and x['reply'] is not None)
 datasets = datasets.filter(
@@ -48,6 +49,7 @@ def prefix_function(examples):
 
 column_names = datasets["train"].column_names
 
+print("Adding prefix and encoding data.")
 datasets = datasets.map(
     prefix_function,
     remove_columns=column_names,
@@ -58,15 +60,13 @@ def tokenizer_function(examples):
 
 column_names = datasets["train"].column_names
 
+print("Tokenizing data.")
 datasets = datasets.map(
     tokenizer_function,
     batched=True,
     num_proc=4,
     remove_columns=column_names,
 )
-
-column_names = datasets["train"].column_names
-print(column_names)
 
 def group_texts(examples):
     concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
@@ -80,6 +80,7 @@ def group_texts(examples):
     result["labels"] = result["input_ids"].copy()
     return result
 
+print("Grouping data.")
 lm_datasets = datasets.map(
     group_texts,
     batched=True,
@@ -95,7 +96,7 @@ training_args = TrainingArguments(
     learning_rate=2e-5,
     weight_decay=0.01,
     warmup_steps=2000,
-    num_train_epochs=20,
+    num_train_epochs=100,
     report_to="wandb",
     save_strategy="epoch"
 )
