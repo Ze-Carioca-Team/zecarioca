@@ -39,6 +39,7 @@ special_tokens = ["<sos_u>", "<eos_u>",
                   "<sos_r>", "<eos_r>"]
 tokenizer.add_special_tokens({'additional_special_tokens': special_tokens})
 model.resize_token_embeddings(len(tokenizer))
+tokenizer.save_pretrained("models/forums_tokenizer")
 
 def prefix_function(examples):
     examples["text"] =  "<sos_u> "+examples["text"]+" <eos_u>"
@@ -91,7 +92,7 @@ training_args = TrainingArguments(
     "models/forums-clm",
     run_name="forums-clm",
     evaluation_strategy="epoch",
-    per_device_train_batch_size=16,
+    per_device_train_batch_size=32,
     gradient_accumulation_steps=4,
     learning_rate=2e-5,
     weight_decay=0.01,
