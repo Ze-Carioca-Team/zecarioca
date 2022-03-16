@@ -15,6 +15,7 @@ names = json.load(open("data/categories.json"))
 
 frames = []
 counter = 0
+files = files[:1000]
 fsize = len(files)
 
 for filein in tqdm.tqdm(files):
