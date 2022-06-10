@@ -42,12 +42,17 @@ def main():
                 dialog += utterance+belief+action+response
             dialogues.append({'id':d['id'], 'text':dialog})
         random.shuffle(dialogues)
-        fname = args.file.replace('out.dialogs', 'process')
+        fname = 'data/type_'+args.file
         with open("data/ontology.json", "w") as fonto:
             json.dump(tokens, fonto)
-        with open(fname, "w") as fdata:
-            for i, line in enumerate(dialogues):
-                print(json.dumps(line), file=fdata)
+        trainfile = open(fname.replace("type", "train"), "w")
+        validfile = open(fname.replace("type", "valid"), "w")
+        trp = random.randint(1,1000)
+        for i, line in enumerate(dialogues):
+            if (trp+i) % 10 == 0:
+                print(json.dumps(line), file=validfile)
+            else:
+                print(json.dumps(line), file=trainfile)
 
 if __name__ == "__main__":
     main()
