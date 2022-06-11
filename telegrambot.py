@@ -6,7 +6,7 @@ import logging
 import argparse
 import mysql.connector
 from process.dialogparser import get_intents
-from connector import request_db
+# from connector import request_db
 from deanonymization import anonymization
 from telegram import Update
 from telegram.ext import (
@@ -139,7 +139,7 @@ def telegram_bot(args, debug_mode):
 
         # action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
         action_db = ""
-        logging.info("[DATABASE] " + action_db + str(trans))
+        # logging.info("[DATABASE] " + action_db + str(trans))
         action_db = tokenizer.encode(action_db)
         outputs = model.generate(input_ids=torch.LongTensor(
             generated+action_db).reshape(1,-1),
