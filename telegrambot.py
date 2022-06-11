@@ -88,7 +88,7 @@ def telegram_bot(args, debug_mode):
 
     updater = Updater(token=api['token'])
     dispatcher = updater.dispatcher
-    initialize_table()
+    # initialize_table()
 
     def start(update, context):
         response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
@@ -166,10 +166,10 @@ def telegram_bot(args, debug_mode):
     dispatcher.add_handler(start_handler)
     restart_handler = CommandHandler('restart', restart)
     dispatcher.add_handler(restart_handler)
-    correct_handler = CommandHandler('correct', correct)
-    dispatcher.add_handler(correct_handler)
-    incorrect_handler = CommandHandler('incorrect', incorrect)
-    dispatcher.add_handler(incorrect_handler)
+    #correct_handler = CommandHandler('correct', correct)
+    #dispatcher.add_handler(correct_handler)
+    #incorrect_handler = CommandHandler('incorrect', incorrect)
+    #dispatcher.add_handler(incorrect_handler)
     reply_handler = MessageHandler(Filters.text & (~Filters.command), reply)
     dispatcher.add_handler(reply_handler)
 
