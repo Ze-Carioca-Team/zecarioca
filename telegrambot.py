@@ -5,7 +5,7 @@ import torch
 import logging
 import argparse
 import mysql.connector
-from dialogparser import get_intents
+from preprocess.dialogparser import get_intents
 from connector import request_db
 from deanonymization import anonymization
 from telegram import Update
@@ -80,98 +80,102 @@ def update_situation(id_dialog, situation):
     mydb.commit()
     mydb.close()
 
-def telegram_bot(args):
+def telegram_bot(args, debug_mode):
     with open('telegram.json') as fin: api = json.load(fin)
-    with torch.no_grad():
-        tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
-        model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
+    tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
+    model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
+    model.eval()
 
-        updater = Updater(token=api['token'])
-        dispatcher = updater.dispatcher
-        initialize_table()
+    updater = Updater(token=api['token'])
+    dispatcher = updater.dispatcher
+    initialize_table()
 
-        def start(update, context):
-            response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
-            "Ao final avalie a nossa conversa, utilizando a tag /correct "
-            "quando eu me comporto adequadamente e /incorrect quando o meu "
-            "comportamento saiu do esperado. O domínio da nossa conversa é "
-            +args.dialog_domain+".")
-            context.bot.send_message(chat_id=update.effective_chat.id, text=response)
+    def start(update, context):
+        response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
+        "Ao final avalie a nossa conversa, utilizando a tag /correct "
+        "quando eu me comporto adequadamente e /incorrect quando o meu "
+        "comportamento saiu do esperado. O domínio da nossa conversa é "
+        +args.dialog_domain+".")
+        context.bot.send_message(chat_id=update.effective_chat.id, text=response)
 
-        def restart(update, context):
-            response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
-            "Ao final avalie a nossa conversa, utilizando a tag /correct "
-            "quando eu me comporto adequadamente e /incorrect quando o meu "
-            "comportamento saiu do esperado. O domínio da nossa conversa é "
-            +args.dialog_domain+".")
-            context.bot.send_message(chat_id=update.effective_chat.id, text=response)
-            if 'id' in context.user_data: context.user_data.pop('id')
-            if 'variables' in context.user_data: context.user_data.pop('variables')
-            if 'turn' in context.user_data: context.user_data.pop('turn')
-            if 'msg' in context.user_data: context.user_data.pop('msg')
+    def restart(update, context):
+        response = ("Olá. Eu sou o Ze Carioca, como eu posso te ajudar? "
+        "Ao final avalie a nossa conversa, utilizando a tag /correct "
+        "quando eu me comporto adequadamente e /incorrect quando o meu "
+        "comportamento saiu do esperado. O domínio da nossa conversa é "
+        +args.dialog_domain+".")
+        context.bot.send_message(chat_id=update.effective_chat.id, text=response)
+        if 'id' in context.user_data: context.user_data.pop('id')
+        if 'variables' in context.user_data: context.user_data.pop('variables')
+        if 'turn' in context.user_data: context.user_data.pop('turn')
+        if 'msg' in context.user_data: context.user_data.pop('msg')
 
-        def correct(update, context):
-            if 'id' in context.user_data: update_situation(context.user_data['id'], 1)
+    def correct(update, context):
+        if 'id' in context.user_data: update_situation(context.user_data['id'], 1)
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="Diálogo correto adicionado com sucesso! Obrigada!")
+
+    def incorrect(update, context):
+        if 'id' in context.user_data: update_situation(context.user_data['id'], 0)
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="Diálogo incorreto adicionado com sucesso! Obrigada!")
+
+    def reply(update, context):
+        if 'msg' not in context.user_data: context.user_data['msg'] = ""
+
+        msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
+        logging.info("[USER] " + context.user_data['msg'])
+        contextmsg = tokenizer.encode(context.user_data['msg']+msg)
+        context_length = len(contextmsg)
+        max_len=80
+
+        outputs = model.generate(input_ids=torch.LongTensor(
+            contextmsg).reshape(1,-1),
+            max_length=context_length+max_len,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.encode(['<eos_b>'])[0])
+        generated = outputs[0].numpy().tolist()
+        decoded_output = tokenizer.decode(generated)
+
+        # action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
+        action_db = ""
+        logging.info("[DATABASE] " + action_db + str(trans))
+        action_db = tokenizer.encode(action_db)
+        outputs = model.generate(input_ids=torch.LongTensor(
+            generated+action_db).reshape(1,-1),
+            max_length=context_length+max_len,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.encode(['<eos_r>'])[0])
+        generated = outputs[0].numpy().tolist()
+
+        decoded_output = tokenizer.decode(generated)
+        context.user_data['msg'] = decoded_output
+        for k,v in trans:
+            decoded_output = decoded_output.replace(k,v,1)
+
+        system_response = decoded_output.split('<sos_r>')[-1].split('<eos_r>')[0]
+
+        logging.info("[SYSTEM] "+decoded_output)
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text=system_response)
+        if debug_mode:
             context.bot.send_message(chat_id=update.effective_chat.id,
-                                     text="Diálogo correto adicionado com sucesso! Obrigada!")
+                                     text=decoded_output)
 
-        def incorrect(update, context):
-            if 'id' in context.user_data: update_situation(context.user_data['id'], 0)
-            context.bot.send_message(chat_id=update.effective_chat.id,
-                                     text="Diálogo incorreto adicionado com sucesso! Obrigada!")
+    start_handler = CommandHandler('start', start)
+    dispatcher.add_handler(start_handler)
+    restart_handler = CommandHandler('restart', restart)
+    dispatcher.add_handler(restart_handler)
+    correct_handler = CommandHandler('correct', correct)
+    dispatcher.add_handler(correct_handler)
+    incorrect_handler = CommandHandler('incorrect', incorrect)
+    dispatcher.add_handler(incorrect_handler)
+    reply_handler = MessageHandler(Filters.text & (~Filters.command), reply)
+    dispatcher.add_handler(reply_handler)
 
-        def reply(update, context):
-            if 'msg' not in context.user_data: context.user_data['msg'] = ""
-
-            msg = '<sos_u>'+update.message.text.lower()+'<eos_u><sos_b>'
-            logging.info("[USER] " + context.user_data['msg'])
-            contextmsg = tokenizer.encode(context.user_data['msg']+msg)
-            context_length = len(contextmsg)
-            max_len=80
-
-            outputs = model.generate(input_ids=torch.LongTensor(
-                contextmsg).reshape(1,-1),
-                max_length=context_length+max_len,
-                pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=tokenizer.encode(['<eos_b>'])[0])
-            generated = outputs[0].numpy().tolist()
-            decoded_output = tokenizer.decode(generated)
-
-            action_db, trans = request_db(decoded_output.split('<eos_u>')[-1])
-            logging.info("[DATABASE] " + action_db + str(trans))
-            action_db = tokenizer.encode(action_db)
-            outputs = model.generate(input_ids=torch.LongTensor(
-                generated+action_db).reshape(1,-1),
-                max_length=context_length+max_len,
-                pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=tokenizer.encode(['<eos_r>'])[0])
-            generated = outputs[0].numpy().tolist()
-
-            decoded_output = tokenizer.decode(generated)
-            context.user_data['msg'] = decoded_output
-            for k,v in trans:
-                decoded_output = decoded_output.replace(k,v,1)
-
-            system_response = decoded_output.split('<sos_r>')[-1].split('<eos_r>')[0]
-
-            logging.info("[SYSTEM] "+decoded_output)
-            context.bot.send_message(chat_id=update.effective_chat.id,
-                                     text=system_response)
-
-        start_handler = CommandHandler('start', start)
-        dispatcher.add_handler(start_handler)
-        restart_handler = CommandHandler('restart', restart)
-        dispatcher.add_handler(restart_handler)
-        correct_handler = CommandHandler('correct', correct)
-        dispatcher.add_handler(correct_handler)
-        incorrect_handler = CommandHandler('incorrect', incorrect)
-        dispatcher.add_handler(incorrect_handler)
-        reply_handler = MessageHandler(Filters.text & (~Filters.command), reply)
-        dispatcher.add_handler(reply_handler)
-
-        updater.start_polling()
-        updater.idle()
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     args = parse_args()
-    telegram_bot(args)
+    telegram_bot(args, debug_mode=True)
