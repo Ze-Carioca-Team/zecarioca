@@ -150,8 +150,8 @@ def telegram_bot(args, debug_mode):
 
         decoded_output = tokenizer.decode(generated)
         context.user_data['msg'] = decoded_output
-        for k,v in trans:
-            decoded_output = decoded_output.replace(k,v,1)
+        # for k,v in trans:
+        #     decoded_output = decoded_output.replace(k,v,1)
 
         system_response = decoded_output.split('<sos_r>')[-1].split('<eos_r>')[0]
 
