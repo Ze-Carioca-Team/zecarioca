@@ -5,7 +5,7 @@ import torch
 import logging
 import argparse
 import mysql.connector
-from preprocess.dialogparser import get_intents
+from process.dialogparser import get_intents
 from connector import request_db
 from deanonymization import anonymization
 from telegram import Update
