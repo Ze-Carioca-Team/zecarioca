@@ -2,7 +2,7 @@
 # coding: utf-8
 import json
 import random
-from dialogparser import get_belief
+from process.dialogparser import get_belief
 import mysql.connector
 
 db_data = {
