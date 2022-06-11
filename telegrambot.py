@@ -7,7 +7,7 @@ import argparse
 import mysql.connector
 from process.dialogparser import get_intents
 # from connector import request_db
-from deanonymization import anonymization
+# from deanonymization import anonymization
 from telegram import Update
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler, Filters, CallbackContext)
