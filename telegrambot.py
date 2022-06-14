@@ -80,13 +80,13 @@ def update_situation(id_dialog, situation):
     mydb.commit()
     mydb.close()
 
-def telegram_bot(args, debug_mode):
+def telegram_bot(args, debug_mode=False, deploy_mode='token-test'):
     with open('telegram.json') as fin: api = json.load(fin)
     tokenizer = GPT2Tokenizer.from_pretrained(args.checkpoint)
     model = GPT2LMHeadModel.from_pretrained(args.checkpoint)
     model.eval()
 
-    updater = Updater(token=api['token'])
+    updater = Updater(token=api[deploy_mode])
     dispatcher = updater.dispatcher
     # initialize_table()
 
