@@ -752,7 +752,7 @@
           "speaker": "client",
           "utterance": "Vai ser uma pizza grande, 1 Atum com palmito",
           "utterance_delex": "Vai ser [itens]",
-          "intent": "[fazer_pedido]",
+          "intent": "[informa_pedido]",
           "slot-values": {
             "itens": "uma pizza grande, 1 Atum com palmito"
           },
