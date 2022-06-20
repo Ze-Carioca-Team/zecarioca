@@ -1,5 +1,5 @@
 import math
-from dialogparser import get_intents, remove_tags
+from process.dialogparser import get_intents, remove_tags
 from collections import defaultdict, Counter
 from lexical_diversity import lex_div as ld
 from sacrebleu import corpus_bleu
